@@ -1,0 +1,217 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum LearningLevel {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+  FLUENT
+}
+
+enum FriendRequestStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  CANCELED
+}
+
+enum RoomStatus {
+  WAITING
+  LIVE
+  ENDED
+}
+
+enum RoomProvider {
+  WEBRTC
+  HMS
+}
+
+enum OAuthProvider {
+  YOUTUBE
+}
+
+enum PostVideoStatus {
+  DRAFT
+  PROCESSING
+  UPLOADED
+  FAILED
+}
+
+model User {
+  id                     String          @id @default(cuid())
+  name                   String
+  email                  String          @unique
+  password               String
+  profileImage           String?
+  bio                    String?         @db.Text
+  level                  LearningLevel   @default(BEGINNER)
+  posts                  Post[]
+  likes                  Like[]
+  comments               Comment[]
+  sentFriendRequests     FriendRequest[] @relation("FriendRequestSender")
+  receivedFriendRequests FriendRequest[] @relation("FriendRequestReceiver")
+  friendships            Friendship[]    @relation("FriendshipUser")
+  friendOf               Friendship[]    @relation("FriendshipFriend")
+  userWords              UserWord[]
+  roomsCreated           Room[]          @relation("RoomHost")
+  roomParticipants       RoomParticipant[]
+  oauthAccounts          OAuthAccount[]
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @updatedAt
+}
+
+model Post {
+  id             String          @id @default(cuid())
+  title          String
+  description    String          @db.Text
+  script         String?         @db.Text
+  learningLevel  LearningLevel
+  youtubeVideoId String?
+  youtubeUrl     String?
+  localVideoUrl  String?
+  thumbnailUrl   String?
+  videoStatus    PostVideoStatus @default(DRAFT)
+  authorId       String
+  author         User            @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  likes          Like[]
+  comments       Comment[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@index([authorId, createdAt(sort: Desc)])
+  @@index([learningLevel, createdAt(sort: Desc)])
+}
+
+model Like {
+  id        String   @id @default(cuid())
+  userId    String
+  postId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, postId])
+  @@index([postId])
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  content   String   @db.Text
+  userId    String
+  postId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([postId, createdAt(sort: Desc)])
+}
+
+model FriendRequest {
+  id         String              @id @default(cuid())
+  senderId   String
+  receiverId String
+  status     FriendRequestStatus @default(PENDING)
+  sender     User                @relation("FriendRequestSender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver   User                @relation("FriendRequestReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+
+  @@unique([senderId, receiverId])
+  @@index([receiverId, status])
+}
+
+model Friendship {
+  id        String   @id @default(cuid())
+  userId    String
+  friendId  String
+  user      User     @relation("FriendshipUser", fields: [userId], references: [id], onDelete: Cascade)
+  friend    User     @relation("FriendshipFriend", fields: [friendId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, friendId])
+  @@index([friendId])
+}
+
+model DictionaryWord {
+  id              String         @id @default(cuid())
+  word            String         @unique
+  definition      String         @db.Text
+  partOfSpeech    String?
+  phonetic        String?
+  exampleSentence String?        @db.Text
+  level           LearningLevel  @default(BEGINNER)
+  userWords       UserWord[]
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@index([word])
+}
+
+model UserWord {
+  id               String         @id @default(cuid())
+  notes            String?        @db.Text
+  mastered         Boolean        @default(false)
+  userId           String
+  dictionaryWordId String
+  user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dictionaryWord   DictionaryWord @relation(fields: [dictionaryWordId], references: [id], onDelete: Cascade)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@unique([userId, dictionaryWordId])
+  @@index([userId])
+}
+
+model Room {
+  id              String            @id @default(cuid())
+  name            String
+  slug            String            @unique
+  topic           String?           @db.Text
+  hostId          String
+  host            User              @relation("RoomHost", fields: [hostId], references: [id], onDelete: Cascade)
+  provider        RoomProvider      @default(WEBRTC)
+  status          RoomStatus        @default(WAITING)
+  maxParticipants Int               @default(4)
+  externalRoomId  String?
+  participants    RoomParticipant[]
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@index([status, createdAt(sort: Desc)])
+}
+
+model RoomParticipant {
+  id       String   @id @default(cuid())
+  roomId   String
+  userId   String
+  room     Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  joinedAt DateTime @default(now())
+
+  @@unique([roomId, userId])
+  @@index([userId])
+}
+
+model OAuthAccount {
+  id                    String        @id @default(cuid())
+  userId                String
+  provider              OAuthProvider
+  externalAccountId     String?
+  encryptedAccessToken  String?
+  encryptedRefreshToken String?
+  expiresAt             DateTime?
+  scope                 String?
+  user                  User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+
+  @@unique([userId, provider])
+}

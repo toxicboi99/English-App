@@ -1,0 +1,79 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 220 33% 98%;
+  --foreground: 221 39% 11%;
+  --muted: 191 47% 92%;
+  --muted-foreground: 214 20% 35%;
+  --card: 0 0% 100%;
+  --card-foreground: 221 39% 11%;
+  --border: 191 22% 85%;
+  --primary: 190 85% 30%;
+  --primary-foreground: 0 0% 100%;
+  --accent: 36 94% 56%;
+  --accent-foreground: 221 39% 11%;
+  --ring: 190 85% 30%;
+}
+
+* {
+  border-color: hsl(var(--border));
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  color: hsl(var(--foreground));
+  background:
+    radial-gradient(circle at top left, rgba(245, 158, 11, 0.22), transparent 30%),
+    radial-gradient(circle at top right, rgba(11, 114, 133, 0.16), transparent 26%),
+    linear-gradient(180deg, rgba(248, 250, 252, 1), rgba(227, 244, 244, 0.65));
+  min-height: 100vh;
+}
+
+::selection {
+  background: rgba(11, 114, 133, 0.2);
+}
+
+@layer base {
+  h1,
+  h2,
+  h3,
+  h4 {
+    letter-spacing: -0.03em;
+    color: rgb(2 6 23);
+  }
+
+  p {
+    color: rgb(51 65 85);
+  }
+}
+
+@layer components {
+  .panel {
+    @apply rounded-4xl border border-white/70 bg-white/80 shadow-glow backdrop-blur;
+  }
+
+  .hero-grid {
+    background-image:
+      linear-gradient(to right, rgba(15, 23, 42, 0.06) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(15, 23, 42, 0.06) 1px, transparent 1px);
+    background-size: 48px 48px;
+  }
+}
+
+@keyframes scrollUp {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(-100%);
+  }
+}
+
+.animate-scroll {
+  animation: scrollUp linear forwards;
+}
