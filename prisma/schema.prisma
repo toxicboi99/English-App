@@ -30,6 +30,7 @@ enum RoomStatus {
 
 enum RoomProvider {
   WEBRTC
+  LIVEKIT
   HMS
 }
 
@@ -56,9 +57,10 @@ enum PostVisibility {
 
 model User {
   id                     String          @id @default(cuid())
+  clerkId                String?         @unique
   name                   String
   email                  String          @unique
-  password               String
+  password               String?
   profileImage           String?
   bio                    String?         @db.Text
   level                  LearningLevel   @default(BEGINNER)

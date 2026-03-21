@@ -41,10 +41,9 @@ export function AppSidebar({
   };
 }) {
   const pathname = usePathname();
-  const navItems =
-    canAccessAdmin
-      ? [...items, { href: "/admin", label: "Admin Panel", icon: ShieldCheck }]
-      : items;
+  const navItems = canAccessAdmin
+    ? [...items, { href: "/admin", label: "Admin Panel", icon: ShieldCheck }]
+    : items;
 
   return (
     <aside className="panel sticky top-6 hidden h-[calc(100vh-3rem)] w-80 shrink-0 flex-col justify-between overflow-hidden p-6 lg:flex">

@@ -77,3 +77,20 @@ body {
 .animate-scroll {
   animation: scrollUp linear forwards;
 }
+
+.lk-speakup-room {
+  min-height: 42rem;
+}
+
+.lk-speakup-room .lk-video-conference {
+  min-height: 42rem;
+}
+
+.lk-speakup-room .lk-grid-layout {
+  background: rgb(2 6 23);
+}
+
+.lk-speakup-room .lk-focus-layout,
+.lk-speakup-room .lk-participant-tile {
+  border-radius: 1.5rem;
+}

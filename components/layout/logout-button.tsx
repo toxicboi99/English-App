@@ -1,5 +1,6 @@
 "use client";
 
+import { useClerk } from "@clerk/nextjs";
 import { LogOut } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -11,12 +12,10 @@ export function LogoutButton({
   className?: string;
   variant?: "primary" | "secondary" | "ghost" | "danger";
 }) {
-  async function handleLogout() {
-    await fetch("/api/auth/logout", {
-      method: "POST",
-    });
+  const { signOut } = useClerk();
 
-    window.location.href = "/login";
+  async function handleLogout() {
+    await signOut({ redirectUrl: "/login" });
   }
 
   return (

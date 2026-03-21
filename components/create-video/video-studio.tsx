@@ -95,6 +95,7 @@ export function VideoStudio({
   const youtubeReason = searchParams.get("reason");
   const canUpload = youtubeConnected || youtubeState === "connected";
   const initialPrompt = prompts[0];
+  const initialLevel = initialPrompt?.level ?? "BEGINNER";
   const livePreviewRef = useRef<HTMLVideoElement | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const recorderRef = useRef<MediaRecorder | null>(null);
@@ -105,7 +106,7 @@ export function VideoStudio({
     "I practiced this speaking prompt on SpeakUp.",
   );
   const [script, setScript] = useState<string>(initialPrompt.script);
-  const [learningLevel, setLearningLevel] = useState<string>(initialPrompt.level);
+  const [learningLevel, setLearningLevel] = useState<string>(initialLevel);
   const [isRecording, setIsRecording] = useState(false);
   const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
   const [recordedUrl, setRecordedUrl] = useState<string | null>(null);
@@ -120,7 +121,18 @@ export function VideoStudio({
     correctedText: string;
     explanation: string;
   } | null>(null);
-  const selectedPrompt = prompts.find((prompt) => prompt.id === selectedPromptId) ?? initialPrompt;
+  const filteredPrompts = prompts.filter((prompt) => prompt.level === learningLevel);
+  const selectedPrompt =
+    filteredPrompts.find((prompt) => prompt.id === selectedPromptId) ??
+    filteredPrompts[0] ??
+    null;
+
+  function applyPrompt(prompt: RecordingPromptOption) {
+    setSelectedPromptId(prompt.id);
+    setTitle(prompt.title);
+    setScript(prompt.script);
+    setLearningLevel(prompt.level);
+  }
 
   useEffect(() => {
     return () => {
@@ -131,6 +143,20 @@ export function VideoStudio({
       streamRef.current?.getTracks().forEach((track) => track.stop());
     };
   }, [recordedUrl]);
+
+  useEffect(() => {
+    if (!filteredPrompts.length) {
+      return;
+    }
+
+    if (!filteredPrompts.some((prompt) => prompt.id === selectedPromptId)) {
+      const fallbackPrompt = filteredPrompts[0];
+
+      setSelectedPromptId(fallbackPrompt.id);
+      setTitle(fallbackPrompt.title);
+      setScript(fallbackPrompt.script);
+    }
+  }, [filteredPrompts, selectedPromptId]);
 
   function clearExistingRecording() {
     if (recordedUrl) {
@@ -401,33 +427,58 @@ export function VideoStudio({
               <Badge>Recording Prompt</Badge>
               <h2 className="mt-4 text-3xl font-semibold">Teleprompter</h2>
             </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <Select
+              onChange={(event) => setLearningLevel(event.target.value)}
+              value={learningLevel}
+            >
+              <option value="BEGINNER">BEGINNER</option>
+              <option value="INTERMEDIATE">INTERMEDIATE</option>
+              <option value="ADVANCED">ADVANCED</option>
+              <option value="FLUENT">FLUENT</option>
+            </Select>
 
             <Select
-              className="w-full max-w-xs"
+              className="w-full"
+              disabled={!filteredPrompts.length}
               onChange={(event) => {
-                const prompt = prompts.find((item) => item.id === event.target.value);
+                const prompt = filteredPrompts.find((item) => item.id === event.target.value);
 
                 if (prompt) {
-                  setSelectedPromptId(prompt.id);
-                  setTitle(prompt.title);
-                  setScript(prompt.script);
-                  setLearningLevel(prompt.level);
+                  applyPrompt(prompt);
                 }
               }}
-              value={selectedPromptId}
+              value={filteredPrompts.some((prompt) => prompt.id === selectedPromptId) ? selectedPromptId : ""}
             >
-              {prompts.map((prompt) => (
-                <option key={prompt.id} value={prompt.id}>
-                  {prompt.title}
-                </option>
-              ))}
+              {filteredPrompts.length ? (
+                filteredPrompts.map((prompt) => (
+                  <option key={prompt.id} value={prompt.id}>
+                    {prompt.title}
+                  </option>
+                ))
+              ) : (
+                <option value="">No teleprompter scripts for this level</option>
+              )}
             </Select>
           </div>
 
-          {selectedPrompt.description ? (
+          <p className="text-sm text-slate-600">
+            Showing only {learningLevel.toLowerCase()} teleprompter scripts.
+          </p>
+
+          {selectedPrompt?.description ? (
             <p className="text-sm text-slate-600">
               {selectedPrompt.description}
             </p>
+          ) : null}
+
+          {!filteredPrompts.length ? (
+            <div className="rounded-4xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+              No saved teleprompter prompt matches this level yet. You can still type your own
+              script below.
+            </div>
           ) : null}
 
           {!isRecording ? (
@@ -571,7 +622,7 @@ export function VideoStudio({
               </Button>
 
               <Button
-                disabled={!recordedBlob || isPublishing}
+                disabled={!isUploading || isPublishing}
                 onClick={() => void publishPost()}
                 
               >
@@ -590,7 +641,7 @@ export function VideoStudio({
                       start working too.
                     </p>
                     <Link
-                      className="inline-flex items-center justify-center rounded-full bg-slate-950 px-5 py-2.5 text-sm font-semibold text-amber-100 transition hover:bg-slate-800"
+                      className="inline-flex items-center justify-center rounded-full bg-blue-600 px-5 py-2.5 text-sm font-semibold text-blue-100 transition hover:bg-slate-800"
                       href="/api/youtube/oauth/start"
                     >
                       Connect YouTube

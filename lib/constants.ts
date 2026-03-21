@@ -11,16 +11,7 @@ export const userRoles = ["USER", "ADMIN"] as const;
 
 export const postVisibilities = ["VISIBLE", "HIDDEN"] as const;
 
-export const roomProviders = ["WEBRTC", "HMS"] as const;
-
-export const publicRoutes = ["/", "/login", "/register"] as const;
-
-export const publicApiPrefixes = [
-  "/api/auth/login",
-  "/api/auth/register",
-  "/api/health",
-  "/api/youtube/oauth/callback",
-] as const;
+export const roomProviders = ["WEBRTC", "LIVEKIT", "HMS"] as const;
 
 export const defaultRecordingPrompts = [
   {

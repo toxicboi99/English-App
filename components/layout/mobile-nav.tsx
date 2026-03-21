@@ -30,10 +30,7 @@ export function MobileNav({
   };
 }) {
   const pathname = usePathname();
-  const navItems =
-    canAccessAdmin
-      ? [...items, { href: "/admin", label: "Admin" }]
-      : items;
+  const navItems = canAccessAdmin ? [...items, { href: "/admin", label: "Admin" }] : items;
 
   return (
     <div className="mb-6 space-y-4 lg:hidden">
@@ -52,20 +49,20 @@ export function MobileNav({
       </div>
       <div className="overflow-x-auto">
         <div className="flex min-w-max gap-2">
-        {navItems.map((item) => (
-          <Link
-            className={cn(
-              "rounded-full px-4 py-2 text-sm font-semibold transition",
-              pathname === item.href || pathname.startsWith(`${item.href}/`)
-                ? "bg-slate-950 text-amber-100"
-                : "bg-white/80 text-slate-700 ring-1 ring-slate-200",
-            )}
-            href={item.href}
-            key={item.href}
-          >
-            {item.label}
-          </Link>
-        ))}
+          {navItems.map((item) => (
+            <Link
+              className={cn(
+                "rounded-full px-4 py-2 text-sm font-semibold transition",
+                pathname === item.href || pathname.startsWith(`${item.href}/`)
+                  ? "bg-slate-950 text-amber-100"
+                  : "bg-white/80 text-slate-700 ring-1 ring-slate-200",
+              )}
+              href={item.href}
+              key={item.href}
+            >
+              {item.label}
+            </Link>
+          ))}
         </div>
       </div>
     </div>

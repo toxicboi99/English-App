@@ -40,6 +40,7 @@ export default async function RoomPage({
   return (
     <RoomStage
       currentUserId={user.id}
+      currentUserName={user.name}
       room={JSON.parse(JSON.stringify(room))}
     />
   );

@@ -26,14 +26,16 @@ export async function POST(request: Request) {
       }
 
       const baseSlug = safeSlug(body.name) || "debate-room";
+      const slug = `${baseSlug}-${Date.now().toString(36)}`;
       const room = await prisma.room.create({
         data: {
           name: body.name,
           topic: body.topic,
-          slug: `${baseSlug}-${Date.now().toString(36)}`,
+          slug,
           hostId: user.id,
           maxParticipants: body.maxParticipants ?? 4,
-          provider: body.provider ?? "WEBRTC",
+          provider: body.provider ?? "LIVEKIT",
+          externalRoomId: body.provider === "LIVEKIT" || !body.provider ? slug : null,
           participants: {
             create: {
               userId: user.id,
@@ -81,7 +83,11 @@ export async function POST(request: Request) {
     }
 
     if (body.action === "join") {
-      if (room.participants.length >= room.maxParticipants) {
+      const alreadyJoined = room.participants.some(
+        (participant) => participant.userId === user.id,
+      );
+
+      if (!alreadyJoined && room.participants.length >= room.maxParticipants) {
         return apiError("This room is already full.", 409);
       }
 

@@ -1,3 +1,5 @@
+import Image from "next/image";
+
 export default function AuthLayout({
   children,
 }: Readonly<{
@@ -6,67 +8,49 @@ export default function AuthLayout({
   return (
     <main className="mx-auto flex min-h-screen max-w-6xl items-center px-6 py-10 lg:px-8">
       <div className="relative grid w-full gap-8 lg:grid-cols-[1fr_1.1fr]">
+        <div className="pointer-events-none absolute inset-0 -z-10">
+          <div className="absolute -top-32 -left-32 h-[300px] w-[300px] rounded-full bg-amber-300/30 blur-[100px]" />
+          <div className="absolute right-0 bottom-0 h-[320px] w-[320px] rounded-full bg-cyan-300/30 blur-[110px]" />
+        </div>
 
-  {/* 🌈 LIGHT GLOW BACKGROUND */}
-  <div className="pointer-events-none absolute inset-0 -z-10">
-    <div className="absolute -top-32 -left-32 h-[300px] w-[300px] rounded-full bg-purple-300/40 blur-[100px]" />
-    <div className="absolute bottom-0 right-0 h-[300px] w-[300px] rounded-full bg-blue-300/40 blur-[100px]" />
-  </div>
+        <div className="hidden flex-col justify-between rounded-[2.5rem] border border-white/70 bg-slate-950 p-10 text-amber-100 shadow-[0_24px_80px_rgba(15,23,42,0.18)] lg:flex">
+          <div>
+            <p className="mt-5 max-w-md text-base leading-8 text-slate-300">SpeakUp</p>
+            <h1 className="mt-2 text-3xl font-bold tracking-tight text-gray-1000 sm:text-4xl">
+              Verified speaking practice for real live debate rooms.
+            </h1>
+            <p className="mt-5 max-w-md text-base leading-8 text-slate-300">
+              Register with email verification, sign in securely with Clerk, and
+              move from solo practice into production-ready live conversations.
+            </p>
+          </div>
 
-  {/* 🔥 LEFT PANEL (UPGRADED) */}
-  <div className="hidden flex-col justify-between rounded-[2.5rem] border border-gray-200 bg-white/70 p-10 backdrop-blur-xl transition-all duration-500 hover:scale-[1.02] hover:shadow-[0_20px_60px_rgba(0,0,0,0.1)] lg:flex">
+          <div className="relative mt-10 flex items-center justify-center">
+            <div className="absolute h-48 w-48 rounded-full bg-gradient-to-br from-amber-300/25 to-cyan-300/25 blur-3xl" />
+            <Image
+              alt="SpeakUp learner illustration"
+              className="relative z-10 max-h-[28rem] w-auto drop-shadow-[0_20px_30px_rgba(15,23,42,0.3)]"
+              height={560}
+              priority
+              src="/reg.jpg"
+              width={420}
+            />
+          </div>
 
-    <div>
-      <p className="text-xs uppercase tracking-[0.3em] text-gray-500">
-        SpeakUp
-      </p>
+          <div className="rounded-3xl border border-white/10 bg-white/5 p-6">
+            <p className="text-sm leading-7 text-slate-300">
+              Email-code verification protects account creation, Clerk handles
+              password recovery through the inbox, and LiveKit powers the online
+              debate-room experience when credentials are configured.
+            </p>
+          </div>
+        </div>
 
-      <h1 className="mt-6 text-5xl font-bold leading-tight text-gray-900">
-        Build fluent English
-        <span className="block bg-gradient-to-r from-purple-500 to-blue-500 bg-clip-text text-transparent">
-          in public.
-        </span>
-      </h1>
-
-      <p className="mt-5 max-w-md text-base leading-8 text-gray-600">
-        Practice with video, keep your language growth visible, and stay
-        motivated through a social learning loop.
-      </p>
-    </div>
-{/* 🧍‍♂️ 3D CHARACTER */}
-<div className="relative mt-10 flex items-center justify-center">
-  
-  {/* Glow behind character */}
-  <div className="absolute h-40 w-40 rounded-full bg-gradient-to-br from-purple-300/40 to-blue-300/40 blur-3xl" />
-
-  {/* Character Image */}
-  <img
-    src="/reg.jpg"   // 👉 put your image in public folder
-    alt="3D Character"
-    className="relative z-10 h-150 w-auto drop-shadow-[0_20px_30px_rgba(0,0,0,0.15)] transition duration-500 hover:scale-110 hover:-translate-y-2"
-  />
-</div>
-    {/* 💎 GLASS CARD */}
-    <div className="mt-10 rounded-3xl border border-gray-200 bg-white/60 p-6 backdrop-blur-xl transition hover:-translate-y-1 hover:shadow-lg">
-      <p className="text-sm text-gray-600">
-        🚀 SpeakUp combines guided speaking prompts, embedded YouTube playback,
-        social feedback, debate rooms, dictionaries, and optional AI coaching.
-      </p>
-    </div>
-  </div>
-
-  {/* 🔥 RIGHT PANEL (FORM AREA) */}
-  <div className="relative rounded-[2.5rem] border border-gray-200 bg-white/80 p-8 backdrop-blur-xl md:p-10 shadow-[0_10px_40px_rgba(0,0,0,0.08)] transition-all duration-500 hover:shadow-[0_20px_60px_rgba(0,0,0,0.12)]">
-
-    {/* INNER LIGHT EFFECT */}
-    <div className="pointer-events-none absolute inset-0 rounded-[2.5rem] bg-gradient-to-br from-white/60 to-transparent opacity-60" />
-
-    <div className="relative z-10">
-      {children}
-    </div>
-  </div>
-
-</div>
+        <div className="relative rounded-[2.5rem] border border-white/80 bg-white/85 p-8 shadow-[0_10px_40px_rgba(15,23,42,0.08)] backdrop-blur-xl md:p-10">
+          <div className="pointer-events-none absolute inset-0 rounded-[2.5rem] bg-gradient-to-br from-white/60 to-transparent opacity-70" />
+          <div className="relative z-10">{children}</div>
+        </div>
+      </div>
     </main>
   );
 }

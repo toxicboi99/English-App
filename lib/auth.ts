@@ -1,28 +1,16 @@
 import { cache } from "react";
-import { cookies } from "next/headers";
-import { NextRequest } from "next/server";
-import bcrypt from "bcrypt";
-import type { UserRole } from "@prisma/client";
+import type { User as ClerkUser } from "@clerk/backend";
+import { currentUser } from "@clerk/nextjs/server";
+import type { LearningLevel, UserRole } from "@prisma/client";
+import type { NextRequest } from "next/server";
 
-import { authCookieName } from "@/lib/constants";
-import {
-  clearAuthCookie,
-  setAuthCookie,
-  signAuthToken,
-  verifyAuthToken,
-} from "@/lib/jwt";
+import { learningLevels } from "@/lib/constants";
+import { clearAuthCookie, setAuthCookie, signAuthToken, verifyAuthToken } from "@/lib/jwt";
 import { prisma } from "@/lib/prisma";
-
-export async function hashPassword(password: string) {
-  return bcrypt.hash(password, 12);
-}
-
-export async function verifyPassword(password: string, hashedPassword: string) {
-  return bcrypt.compare(password, hashedPassword);
-}
 
 const currentUserSelect = {
   id: true,
+  clerkId: true,
   name: true,
   email: true,
   profileImage: true,
@@ -37,6 +25,86 @@ const currentUserSelect = {
     },
   },
 } as const;
+
+function parseLearningLevel(value: unknown): LearningLevel | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  return learningLevels.includes(value as (typeof learningLevels)[number])
+    ? (value as LearningLevel)
+    : undefined;
+}
+
+function parseOptionalText(value: unknown, maxLength: number) {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return undefined;
+  }
+
+  return trimmed.slice(0, maxLength);
+}
+
+function parseOptionalUrl(value: unknown) {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  try {
+    const parsed = new URL(value);
+
+    if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+      return parsed.toString();
+    }
+  } catch {
+    return undefined;
+  }
+
+  return undefined;
+}
+
+function getPrimaryEmail(clerkUser: ClerkUser) {
+  return (
+    clerkUser.primaryEmailAddress?.emailAddress?.toLowerCase() ??
+    clerkUser.emailAddresses[0]?.emailAddress?.toLowerCase() ??
+    null
+  );
+}
+
+function toDisplayName(clerkUser: ClerkUser, email: string) {
+  const fullName = clerkUser.fullName?.trim();
+
+  if (fullName) {
+    return fullName;
+  }
+
+  const username = clerkUser.username?.trim();
+
+  if (username) {
+    return username;
+  }
+
+  const emailPrefix = email.split("@")[0]?.replace(/[._-]+/g, " ").trim();
+
+  if (!emailPrefix) {
+    return "SpeakUp Learner";
+  }
+
+  return emailPrefix.replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function isMissingClerkIdColumnError(error: unknown) {
+  return (
+    error instanceof Error &&
+    error.message.includes("User.clerkId") &&
+    error.message.includes("does not exist")
+  );
+}
 
 function getConfiguredAdminEmails() {
   return new Set(
@@ -82,23 +150,92 @@ export async function canAccessAdminPanel(user: { email: string; role: UserRole 
   return adminCount === 0;
 }
 
-export async function getUserFromRequest(request: NextRequest) {
-  const token = request.cookies.get(authCookieName)?.value;
+async function syncClerkUserRecord(clerkUser: ClerkUser) {
+  const email = getPrimaryEmail(clerkUser);
 
-  if (!token) {
+  if (!email) {
     return null;
   }
 
-  const payload = await verifyAuthToken(token);
+  const legacyUserSelect = {
+    id: true,
+    name: true,
+    email: true,
+    password: true,
+    profileImage: true,
+    bio: true,
+    level: true,
+    role: true,
+    isActive: true,
+  } as const;
 
-  if (!payload?.userId) {
+  let supportsClerkId = true;
+  let existingUser;
+
+  try {
+    existingUser = await prisma.user.findFirst({
+      where: {
+        OR: [{ clerkId: clerkUser.id }, { email }],
+      },
+      select: legacyUserSelect,
+    });
+  } catch (error) {
+    if (!isMissingClerkIdColumnError(error)) {
+      throw error;
+    }
+
+    supportsClerkId = false;
+    existingUser = await prisma.user.findUnique({
+      where: { email },
+      select: legacyUserSelect,
+    });
+  }
+
+  const requestedLevel = parseLearningLevel(clerkUser.unsafeMetadata?.level);
+  const requestedBio = parseOptionalText(clerkUser.unsafeMetadata?.bio, 280);
+  const requestedProfileImage = parseOptionalUrl(clerkUser.unsafeMetadata?.profileImage);
+
+  const baseData = {
+    name: existingUser?.name?.trim() || toDisplayName(clerkUser, email),
+    email,
+    password: existingUser?.password ?? "__clerk_managed_account__",
+    profileImage:
+      existingUser?.profileImage ??
+      requestedProfileImage ??
+      (clerkUser.hasImage ? clerkUser.imageUrl : null),
+    bio: existingUser?.bio ?? requestedBio,
+    level: existingUser?.level ?? requestedLevel ?? "BEGINNER",
+    role: existingUser?.role ?? getDefaultRoleForEmail(email),
+    isActive: Boolean(existingUser?.isActive ?? true) && !clerkUser.banned && !clerkUser.locked,
+  } as const;
+  const data = supportsClerkId ? { clerkId: clerkUser.id, ...baseData } : baseData;
+
+  const user = existingUser
+    ? await prisma.user.update({
+        where: { id: existingUser.id },
+        data,
+        select: currentUserSelect,
+      })
+    : await prisma.user.create({
+        data,
+        select: currentUserSelect,
+      });
+
+  return applyEffectiveRole(user);
+}
+
+const getSyncedCurrentUser = cache(async () => {
+  const clerkUser = await currentUser();
+
+  if (!clerkUser) {
     return null;
   }
 
-  const user = await prisma.user.findUnique({
-    where: { id: payload.userId },
-    select: currentUserSelect,
-  });
+  return syncClerkUserRecord(clerkUser);
+});
+
+export async function getUserFromRequest(_request: NextRequest) {
+  const user = await getSyncedCurrentUser();
 
   if (!user?.isActive) {
     return null;
@@ -108,36 +245,24 @@ export async function getUserFromRequest(request: NextRequest) {
 }
 
 export const getCurrentUser = cache(async () => {
-  const cookieStore = await cookies();
-  const token = cookieStore.get(authCookieName)?.value;
-
-  if (!token) {
-    return null;
-  }
-
-  const payload = await verifyAuthToken(token);
-
-  if (!payload?.userId) {
-    return null;
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { id: payload.userId },
-    select: currentUserSelect,
-  });
+  const user = await getSyncedCurrentUser();
 
   if (!user?.isActive) {
     return null;
   }
 
-  return applyEffectiveRole(user);
+  return user;
 });
 
 export async function requireCurrentUser() {
-  const user = await getCurrentUser();
+  const user = await getSyncedCurrentUser();
 
   if (!user) {
     throw new Error("Unauthorized");
+  }
+
+  if (!user.isActive) {
+    throw new Error("Account suspended");
   }
 
   return user;

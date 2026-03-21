@@ -43,6 +43,12 @@ type RoomsResponse = {
   rooms: Room[];
 };
 
+const providerLabels: Record<string, string> = {
+  LIVEKIT: "LiveKit production",
+  WEBRTC: "Browser local",
+  HMS: "100ms-ready",
+};
+
 export function RoomsClient({ initialRooms }: { initialRooms: Room[] }) {
   const router = useRouter();
   const { data, mutate } = useSWR<RoomsResponse>("/api/room", fetcher, {
@@ -58,12 +64,13 @@ export function RoomsClient({ initialRooms }: { initialRooms: Room[] }) {
     setIsCreating(true);
 
     const formData = new FormData(event.currentTarget);
+    const provider = String(formData.get("provider") || "LIVEKIT");
     const payload = {
       action: "create",
       name: String(formData.get("name") || ""),
       topic: String(formData.get("topic") || ""),
       maxParticipants: Number(formData.get("maxParticipants") || "4"),
-      provider: String(formData.get("provider") || "WEBRTC"),
+      provider,
     };
 
     const response = await fetch("/api/room", {
@@ -85,7 +92,11 @@ export function RoomsClient({ initialRooms }: { initialRooms: Room[] }) {
 
     const createdRoom = result.room;
 
-    setStatus("Room created. Opening your live practice space...");
+    setStatus(
+      createdRoom.provider === "LIVEKIT"
+        ? "Room created. Opening the live production stage..."
+        : "Room created. Opening the browser-local practice stage...",
+    );
     await mutate();
     startTransition(() => {
       router.push(`/debate-rooms/${createdRoom.slug}`);
@@ -94,6 +105,8 @@ export function RoomsClient({ initialRooms }: { initialRooms: Room[] }) {
   }
 
   async function joinRoom(room: Room) {
+    setStatus(null);
+
     const response = await fetch("/api/room", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -142,12 +155,27 @@ export function RoomsClient({ initialRooms }: { initialRooms: Room[] }) {
       <Card className="overflow-hidden rounded-[2.5rem] bg-slate-950 p-8 text-amber-100">
         <Badge className="bg-white/10 text-amber-200">Debate Rooms</Badge>
         <h1 className="mt-4 font-[var(--font-display)] text-4xl text-amber-300">
-          Practice live English in small-group discussion rooms.
+          Go live with production-ready English debate rooms.
         </h1>
         <p className="mt-4 max-w-3xl text-base leading-8 text-slate-300">
-          Create 2-4 person rooms, bring your camera and mic, and use SpeakUp&apos;s
-          room system as the social speaking layer of the app.
+          Create 2-4 person rooms with LiveKit for real online sessions, or keep
+          a browser-local preview room when you only need a mic and camera check.
         </p>
+      </Card>
+
+      <Card className="border-cyan-100 bg-cyan-50">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-cyan-950">
+              Provider guide
+            </p>
+            <p className="mt-2 text-sm leading-7 text-cyan-900">
+              `WEBRTC` is local-only preview inside the browser. `LIVEKIT` is the
+              production path for shared online debate rooms with real participants.
+            </p>
+          </div>
+          <Badge className="self-start bg-cyan-900 text-cyan-50">LiveKit recommended</Badge>
+        </div>
       </Card>
 
       {status ? (
@@ -175,11 +203,15 @@ export function RoomsClient({ initialRooms }: { initialRooms: Room[] }) {
                 <option value="3">3 participants</option>
                 <option value="4">4 participants</option>
               </Select>
-              <Select defaultValue="WEBRTC" name="provider">
-                <option value="WEBRTC">WebRTC mode</option>
-                <option value="HMS">100ms-ready mode</option>
+              <Select defaultValue="LIVEKIT" name="provider">
+                <option value="LIVEKIT">LiveKit production</option>
+                <option value="WEBRTC">Browser local preview</option>
               </Select>
             </div>
+            <p className="text-sm leading-7 text-slate-500">
+              Choose LiveKit for real online sessions. Browser local preview stays
+              on your device and is best for solo testing.
+            </p>
             <Button className="w-full" disabled={isCreating} type="submit">
               <PlusCircle className="mr-2 h-4 w-4" />
               {isCreating ? "Creating room..." : "Create room"}
@@ -196,7 +228,9 @@ export function RoomsClient({ initialRooms }: { initialRooms: Room[] }) {
                     <div className="flex flex-wrap items-center gap-3">
                       <h3 className="text-2xl font-semibold text-slate-950">{room.name}</h3>
                       <Badge>{room.status}</Badge>
-                      <Badge className="bg-amber-50 text-amber-800">{room.provider}</Badge>
+                      <Badge className="bg-amber-50 text-amber-800">
+                        {providerLabels[room.provider] ?? room.provider}
+                      </Badge>
                     </div>
                     <p className="text-sm leading-7 text-slate-700">
                       {room.topic || "Bring your own speaking topic and practice on camera."}
