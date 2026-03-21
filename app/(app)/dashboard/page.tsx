@@ -4,6 +4,7 @@ import {
   Camera,
   MessageCircle,
   Mic2,
+  ShieldCheck,
   Users,
   Video,
 } from "lucide-react";
@@ -12,11 +13,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { LogoutButton } from "@/components/layout/logout-button";
-import { getCurrentUser } from "@/lib/auth";
+import { canAccessAdminPanel, getCurrentUser } from "@/lib/auth";
 import { getDashboardData } from "@/lib/data";
 import { formatRelative } from "@/lib/utils";
 
-const modules = [
+const coreModules = [
   {
     href: "/create-video",
     label: "Create Video",
@@ -63,6 +64,19 @@ export default async function DashboardPage() {
   }
 
   const data = await getDashboardData(user.id);
+  const canAccessAdmin = await canAccessAdminPanel(user);
+  const modules =
+    canAccessAdmin
+      ? [
+          ...coreModules,
+          {
+            href: "/admin",
+            label: "Admin Panel",
+            description: "Manage prompts, user access, and feed moderation controls.",
+            icon: ShieldCheck,
+          },
+        ]
+      : coreModules;
 
   return (
     <div className="space-y-6">

@@ -1,7 +1,13 @@
 import { NextResponse } from "next/server";
 
 import { apiError, handleApiError } from "@/lib/api";
-import { hashPassword, setAuthCookie, signAuthToken } from "@/lib/auth";
+import {
+  getDefaultRoleForEmail,
+  hashPassword,
+  isAdminUser,
+  setAuthCookie,
+  signAuthToken,
+} from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { registerSchema } from "@/lib/validators";
 
@@ -26,6 +32,7 @@ export async function POST(request: Request) {
         profileImage: body.profileImage,
         bio: body.bio,
         level: body.level,
+        role: getDefaultRoleForEmail(email),
       },
       select: {
         id: true,
@@ -33,6 +40,7 @@ export async function POST(request: Request) {
         email: true,
         profileImage: true,
         level: true,
+        role: true,
       },
     });
 
@@ -42,7 +50,15 @@ export async function POST(request: Request) {
       name: user.name,
     });
 
-    const response = NextResponse.json({ user }, { status: 201 });
+    const response = NextResponse.json(
+      {
+        user: {
+          ...user,
+          role: isAdminUser(user) ? "ADMIN" : user.role,
+        },
+      },
+      { status: 201 },
+    );
     return setAuthCookie(response, token);
   } catch (error) {
     return handleApiError(error);

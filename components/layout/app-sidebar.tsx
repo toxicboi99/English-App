@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  ShieldCheck,
   BookOpen,
   Camera,
   LayoutDashboard,
@@ -27,16 +28,23 @@ const items = [
 ] as const;
 
 export function AppSidebar({
+  canAccessAdmin,
   user,
 }: {
+  canAccessAdmin: boolean;
   user: {
     name: string;
     email: string;
     profileImage?: string | null;
     level: string;
+    role: string;
   };
 }) {
   const pathname = usePathname();
+  const navItems =
+    canAccessAdmin
+      ? [...items, { href: "/admin", label: "Admin Panel", icon: ShieldCheck }]
+      : items;
 
   return (
     <aside className="panel sticky top-6 hidden h-[calc(100vh-3rem)] w-80 shrink-0 flex-col justify-between overflow-hidden p-6 lg:flex">
@@ -50,7 +58,7 @@ export function AppSidebar({
         </div>
 
         <nav className="space-y-2">
-          {items.map((item) => {
+          {navItems.map((item) => {
             const Icon = item.icon;
             const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
 
@@ -78,7 +86,10 @@ export function AppSidebar({
           <Avatar image={user.profileImage} name={user.name} />
           <div>
             <p className="font-semibold text-slate-950">{user.name}</p>
-            <p className="text-sm text-slate-500">{user.level}</p>
+            <p className="text-sm text-slate-500">
+              {user.level}
+              {canAccessAdmin ? " • Admin" : ""}
+            </p>
           </div>
         </div>
         <p className="mt-3 text-sm text-slate-600">{user.email}</p>

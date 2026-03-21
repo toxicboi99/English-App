@@ -21,6 +21,7 @@ type FeedPost = {
   youtubeVideoId: string | null;
   localVideoUrl: string | null;
   thumbnailUrl: string | null;
+  isVerified: boolean;
   createdAt: string;
   likedByMe: boolean;
   author: {
@@ -115,7 +116,12 @@ export function FeedClient({ initialPosts }: { initialPosts: FeedPost[] }) {
           </div>
 
           <div>
-            <h2 className="text-2xl font-semibold">{post.title}</h2>
+            <div className="flex flex-wrap items-center gap-3">
+              <h2 className="text-2xl font-semibold">{post.title}</h2>
+              {post.isVerified ? (
+                <Badge className="bg-emerald-50 text-emerald-700">Verified</Badge>
+              ) : null}
+            </div>
             <p className="mt-3 text-base leading-8">{post.description}</p>
           </div>
 

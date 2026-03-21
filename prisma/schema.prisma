@@ -37,11 +37,21 @@ enum OAuthProvider {
   YOUTUBE
 }
 
+enum UserRole {
+  USER
+  ADMIN
+}
+
 enum PostVideoStatus {
   DRAFT
   PROCESSING
   UPLOADED
   FAILED
+}
+
+enum PostVisibility {
+  VISIBLE
+  HIDDEN
 }
 
 model User {
@@ -52,6 +62,8 @@ model User {
   profileImage           String?
   bio                    String?         @db.Text
   level                  LearningLevel   @default(BEGINNER)
+  role                   UserRole        @default(USER)
+  isActive               Boolean         @default(true)
   posts                  Post[]
   likes                  Like[]
   comments               Comment[]
@@ -63,6 +75,7 @@ model User {
   roomsCreated           Room[]          @relation("RoomHost")
   roomParticipants       RoomParticipant[]
   oauthAccounts          OAuthAccount[]
+  recordingPrompts       RecordingPrompt[] @relation("PromptCreator")
   createdAt              DateTime        @default(now())
   updatedAt              DateTime        @updatedAt
 }
@@ -78,6 +91,9 @@ model Post {
   localVideoUrl  String?
   thumbnailUrl   String?
   videoStatus    PostVideoStatus @default(DRAFT)
+  isVerified     Boolean         @default(false)
+  visibility     PostVisibility  @default(VISIBLE)
+  moderationNotes String?        @db.Text
   authorId       String
   author         User            @relation(fields: [authorId], references: [id], onDelete: Cascade)
   likes          Like[]
@@ -87,6 +103,22 @@ model Post {
 
   @@index([authorId, createdAt(sort: Desc)])
   @@index([learningLevel, createdAt(sort: Desc)])
+}
+
+model RecordingPrompt {
+  id          String        @id @default(cuid())
+  title       String        @unique
+  description String?       @db.Text
+  script      String        @db.Text
+  level       LearningLevel @default(BEGINNER)
+  isActive    Boolean       @default(true)
+  sortOrder   Int           @default(0)
+  createdById String?
+  createdBy   User?         @relation("PromptCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([isActive, sortOrder, createdAt(sort: Desc)])
 }
 
 model Like {

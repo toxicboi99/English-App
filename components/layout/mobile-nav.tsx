@@ -18,15 +18,22 @@ const items = [
 ] as const;
 
 export function MobileNav({
+  canAccessAdmin,
   user,
 }: {
+  canAccessAdmin: boolean;
   user: {
     name: string;
     profileImage?: string | null;
     level: string;
+    role: string;
   };
 }) {
   const pathname = usePathname();
+  const navItems =
+    canAccessAdmin
+      ? [...items, { href: "/admin", label: "Admin" }]
+      : items;
 
   return (
     <div className="mb-6 space-y-4 lg:hidden">
@@ -35,14 +42,17 @@ export function MobileNav({
           <Avatar image={user.profileImage} name={user.name} size={40} />
           <div>
             <p className="font-semibold text-slate-950">{user.name}</p>
-            <p className="text-sm text-slate-500">{user.level}</p>
+            <p className="text-sm text-slate-500">
+              {user.level}
+              {canAccessAdmin ? " • Admin" : ""}
+            </p>
           </div>
         </div>
         <LogoutButton className="shrink-0 px-4" variant="ghost" />
       </div>
       <div className="overflow-x-auto">
         <div className="flex min-w-max gap-2">
-        {items.map((item) => (
+        {navItems.map((item) => (
           <Link
             className={cn(
               "rounded-full px-4 py-2 text-sm font-semibold transition",

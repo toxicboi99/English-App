@@ -25,6 +25,14 @@ export function handleApiError(error: unknown) {
       return apiError("Unauthorized.", 401);
     }
 
+    if (error.message === "Forbidden") {
+      return apiError("Forbidden.", 403);
+    }
+
+    if (error.message === "Account suspended") {
+      return apiError("Your account has been suspended.", 403);
+    }
+
     return apiError(error.message, 400);
   }
 

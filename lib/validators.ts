@@ -1,6 +1,11 @@
 import { z } from "zod";
 
-import { learningLevels, roomProviders } from "@/lib/constants";
+import {
+  learningLevels,
+  postVisibilities,
+  roomProviders,
+  userRoles,
+} from "@/lib/constants";
 
 const imageSchema = z
   .string()
@@ -55,9 +60,70 @@ export const dictionarySearchSchema = z.object({
 });
 
 export const saveWordSchema = z.object({
+  action: z.literal("save"),
   dictionaryWordId: z.string().min(1),
   notes: z.string().max(240).optional(),
 });
+
+export const createDictionaryWordSchema = z.object({
+  action: z.literal("create"),
+  word: z.string().trim().min(1).max(80),
+  definition: z.string().trim().min(3).max(1500),
+  partOfSpeech: z.string().trim().max(80).optional(),
+  phonetic: z.string().trim().max(80).optional(),
+  exampleSentence: z.string().trim().max(500).optional(),
+  level: z.enum(learningLevels).optional().default("BEGINNER"),
+  notes: z.string().max(240).optional(),
+});
+
+export const dictionaryMutationSchema = z.discriminatedUnion("action", [
+  saveWordSchema,
+  createDictionaryWordSchema,
+]);
+
+export const adminCreatePromptSchema = z.object({
+  action: z.literal("createPrompt"),
+  title: z.string().trim().min(3).max(120),
+  description: z.string().trim().max(400).optional(),
+  script: z.string().trim().min(20).max(5000),
+  level: z.enum(learningLevels).optional().default("BEGINNER"),
+  isActive: z.boolean().optional().default(true),
+  sortOrder: z.number().int().min(0).max(999).optional().default(0),
+});
+
+export const adminUpdatePromptSchema = z.object({
+  action: z.literal("updatePrompt"),
+  promptId: z.string().min(1),
+  title: z.string().trim().min(3).max(120),
+  description: z.string().trim().max(400).optional(),
+  script: z.string().trim().min(20).max(5000),
+  level: z.enum(learningLevels),
+  isActive: z.boolean(),
+  sortOrder: z.number().int().min(0).max(999),
+});
+
+export const adminUpdateUserSchema = z.object({
+  action: z.literal("updateUser"),
+  userId: z.string().min(1),
+  level: z.enum(learningLevels),
+  role: z.enum(userRoles),
+  isActive: z.boolean(),
+});
+
+export const adminUpdatePostSchema = z.object({
+  action: z.literal("updatePost"),
+  postId: z.string().min(1),
+  isVerified: z.boolean(),
+  visibility: z.enum(postVisibilities),
+  moderationNotes: z.string().trim().max(500).optional(),
+});
+
+export const adminMutationSchema = z.discriminatedUnion("action", [
+  adminCreatePromptSchema,
+  adminUpdatePromptSchema,
+  adminUpdateUserSchema,
+  adminUpdatePostSchema,
+]);
 
 export const roomSchema = z.object({
   action: z.enum(["create", "join", "leave"]),

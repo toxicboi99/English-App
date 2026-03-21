@@ -1,3 +1,5 @@
+import { getEffectiveUserRole } from "@/lib/auth";
+import { defaultRecordingPrompts } from "@/lib/constants";
 import { prisma } from "@/lib/prisma";
 
 export async function getDashboardData(userId: string) {
@@ -55,6 +57,9 @@ export async function getDashboardData(userId: string) {
 
 export async function getFeedPosts(userId: string) {
   const posts = await prisma.post.findMany({
+    where: {
+      visibility: "VISIBLE",
+    },
     orderBy: { createdAt: "desc" },
     include: {
       author: {
@@ -89,6 +94,30 @@ export async function getFeedPosts(userId: string) {
   return posts.map((post) => ({
     ...post,
     likedByMe: post.likes.some((like) => like.userId === userId),
+  }));
+}
+
+export async function getRecordingPrompts(includeInactive = false) {
+  const prompts = await prisma.recordingPrompt.findMany({
+    where: includeInactive ? undefined : { isActive: true },
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
+  });
+
+  if (prompts.length) {
+    return prompts;
+  }
+
+  return defaultRecordingPrompts.map((prompt, index) => ({
+    id: `default-${index}`,
+    title: prompt.title,
+    description: prompt.description,
+    script: prompt.script,
+    level: prompt.level,
+    isActive: true,
+    sortOrder: index,
+    createdById: null,
+    createdAt: new Date(0),
+    updatedAt: new Date(0),
   }));
 }
 
@@ -286,4 +315,114 @@ export async function getRoomsData(userId: string) {
     ...room,
     joinedByMe: room.participants.some((participant) => participant.userId === userId),
   }));
+}
+
+export async function getAdminDashboardData() {
+  const [
+    prompts,
+    users,
+    posts,
+    promptCount,
+    userCount,
+    activeUserCount,
+    hiddenPostCount,
+    verifiedPostCount,
+  ] =
+    await prisma.$transaction([
+      prisma.recordingPrompt.findMany({
+        orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
+        include: {
+          createdBy: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+        },
+      }),
+      prisma.user.findMany({
+        orderBy: { createdAt: "desc" },
+        take: 50,
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          level: true,
+          role: true,
+          isActive: true,
+          createdAt: true,
+          _count: {
+            select: {
+              posts: true,
+              userWords: true,
+            },
+          },
+        },
+      }),
+      prisma.post.findMany({
+        orderBy: { createdAt: "desc" },
+        take: 50,
+        select: {
+          id: true,
+          title: true,
+          description: true,
+          learningLevel: true,
+          youtubeVideoId: true,
+          youtubeUrl: true,
+          videoStatus: true,
+          isVerified: true,
+          visibility: true,
+          moderationNotes: true,
+          createdAt: true,
+          author: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              level: true,
+            },
+          },
+          _count: {
+            select: {
+              likes: true,
+              comments: true,
+            },
+          },
+        },
+      }),
+      prisma.recordingPrompt.count(),
+      prisma.user.count(),
+      prisma.user.count({
+        where: { isActive: true },
+      }),
+      prisma.post.count({
+        where: { visibility: "HIDDEN" },
+      }),
+      prisma.post.count({
+        where: { isVerified: true },
+      }),
+    ]);
+
+  return {
+    stats: {
+      promptCount,
+      userCount,
+      activeUserCount,
+      hiddenPostCount,
+      verifiedPostCount,
+    },
+    prompts,
+    users: users.map((user) => ({
+      ...user,
+      role: getEffectiveUserRole(user.email, user.role),
+      postsCount: user._count.posts,
+      savedWordsCount: user._count.userWords,
+    })),
+    posts: posts.map((post) => ({
+      ...post,
+      likesCount: post._count.likes,
+      commentsCount: post._count.comments,
+    })),
+  };
 }

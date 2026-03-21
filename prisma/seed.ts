@@ -1,5 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 
+import { defaultRecordingPrompts } from "../lib/constants";
+
 const prisma = new PrismaClient();
 
 const starterWords = [
@@ -91,6 +93,27 @@ async function main() {
       where: { word: word.word },
       update: word,
       create: word,
+    });
+  }
+
+  for (const [index, prompt] of defaultRecordingPrompts.entries()) {
+    await prisma.recordingPrompt.upsert({
+      where: { title: prompt.title },
+      update: {
+        description: prompt.description,
+        script: prompt.script,
+        level: prompt.level,
+        isActive: true,
+        sortOrder: index,
+      },
+      create: {
+        title: prompt.title,
+        description: prompt.description,
+        script: prompt.script,
+        level: prompt.level,
+        isActive: true,
+        sortOrder: index,
+      },
     });
   }
 }

@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 
 import { apiError, handleApiError } from "@/lib/api";
-import { setAuthCookie, signAuthToken, verifyPassword } from "@/lib/auth";
+import {
+  isAdminUser,
+  setAuthCookie,
+  signAuthToken,
+  verifyPassword,
+} from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { loginSchema } from "@/lib/validators";
 
@@ -19,11 +24,17 @@ export async function POST(request: Request) {
         password: true,
         profileImage: true,
         level: true,
+        role: true,
+        isActive: true,
       },
     });
 
     if (!user) {
       return apiError("Invalid email or password.", 401);
+    }
+
+    if (!user.isActive) {
+      return apiError("Your account has been suspended.", 403);
     }
 
     const isPasswordValid = await verifyPassword(body.password, user.password);
@@ -46,6 +57,7 @@ export async function POST(request: Request) {
           email: user.email,
           profileImage: user.profileImage,
           level: user.level,
+          role: isAdminUser(user) ? "ADMIN" : user.role,
         },
       },
       { status: 200 },
