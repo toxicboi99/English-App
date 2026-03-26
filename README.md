@@ -7,7 +7,7 @@
 - Tailwind CSS for responsive UI
 - YouTube Data API v3 for unlisted video uploads
 - Web Speech API for speaking practice
-- Optional Ollama integration for free local grammar improvement
+- Optional Groq API integration for grammar improvement
 
 ## Main Modules
 
@@ -22,7 +22,7 @@
 
 ## Environment Setup
 
-Copy `.env.example` to `.env` and configure at least:
+Configure `.env` with at least:
 
 - `DATABASE_URL`
 - `JWT_SECRET`
@@ -34,8 +34,8 @@ Add these when you want the external integrations live:
 - `YOUTUBE_CLIENT_SECRET`
 - `YOUTUBE_REDIRECT_URI`
 - `YOUTUBE_REFRESH_TOKEN` or connect an account through the in-app OAuth flow
-- `OLLAMA_BASE_URL`
-- `OLLAMA_MODEL`
+- `GROQ_API_KEY`
+- `GROQ_MODEL`
 - `NEXT_PUBLIC_ROOM_PROVIDER`
 - `ROOM_PROVIDER_API_KEY`
 - `ROOM_PROVIDER_API_SECRET`
@@ -47,7 +47,6 @@ npm install
 npx prisma generate
 npx prisma migrate dev
 npm run prisma:seed
-ollama pull qwen3:4b
 npm run dev
 ```
 
@@ -67,5 +66,5 @@ The checked-in SQL migration was generated from the Prisma schema. You still nee
 
 - YouTube uploads are implemented through OAuth2 and the YouTube Data API v3. Uploads are marked as `unlisted`.
 - Debate rooms currently ship with browser-local camera/mic practice mode plus `/api/room/token` scaffolding. To make multi-user real-time media truly live in production, connect your managed room provider credentials and extend that token route.
-- Ollama is the default free AI path. Start the local Ollama server and pull a model such as `qwen3:4b`. If Ollama is unavailable, SpeakUp falls back to lightweight local text cleanup.
-- If your machine is resource-constrained, try a smaller Ollama model such as `llama3.2:1b` or `gemma3:1b`.
+- Groq powers the grammar helper through its hosted API. Add `GROQ_API_KEY` to `.env`, and optionally override `GROQ_MODEL` if you want a different Groq-supported model.
+- If Groq is unavailable or not configured yet, SpeakUp falls back to lightweight local text cleanup.

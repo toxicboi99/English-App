@@ -17,6 +17,11 @@ type Feedback = {
   feedback: string;
 };
 
+type GrammarImprovement = {
+  correctedText: string;
+  explanation: string;
+};
+
 type SpeechRecognitionResultLike = {
   transcript: string;
 };
@@ -53,7 +58,7 @@ export function SpeakingPractice() {
   const [isListening, setIsListening] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
-  const [aiImprovement, setAiImprovement] = useState<string | null>(null);
+  const [aiImprovement, setAiImprovement] = useState<GrammarImprovement | null>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
 
   const recognitionSupported = useMemo(
@@ -144,9 +149,7 @@ export function SpeakingPractice() {
       }),
     });
 
-    const result = (await response.json()) as {
-      correctedText?: string;
-      explanation?: string;
+    const result = (await response.json()) as Partial<GrammarImprovement> & {
       error?: string;
     };
 
@@ -155,9 +158,15 @@ export function SpeakingPractice() {
       return;
     }
 
-    setAiImprovement(
-      `${result.correctedText ?? ""}${result.explanation ? ` — ${result.explanation}` : ""}`,
-    );
+    if (!result.correctedText) {
+      setStatus("Unable to improve the sentence.");
+      return;
+    }
+
+    setAiImprovement({
+      correctedText: result.correctedText,
+      explanation: result.explanation ?? "",
+    });
     setStatus("AI sentence improvement generated.");
   }
 
@@ -261,7 +270,24 @@ export function SpeakingPractice() {
 
           {aiImprovement ? (
             <Card className="border-amber-100 bg-amber-50">
-              <p className="text-sm leading-7 text-amber-900">{aiImprovement}</p>
+              <div className="space-y-3">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.2em] text-amber-700">
+                    Improved sentence
+                  </p>
+                  <p className="mt-2 text-sm leading-7 text-amber-950">
+                    {aiImprovement.correctedText}
+                  </p>
+                </div>
+                {aiImprovement.explanation ? (
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.2em] text-amber-700">Why</p>
+                    <p className="mt-2 text-sm leading-7 text-amber-900">
+                      {aiImprovement.explanation}
+                    </p>
+                  </div>
+                ) : null}
+              </div>
             </Card>
           ) : null}
         </div>

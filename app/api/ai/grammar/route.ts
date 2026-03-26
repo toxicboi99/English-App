@@ -1,6 +1,6 @@
 import { apiSuccess, handleApiError } from "@/lib/api";
 import { requireCurrentUser } from "@/lib/auth";
-import { generateGrammarFeedback } from "@/lib/ollama";
+import { generateGrammarFeedback } from "@/lib/groq";
 import { grammarSchema } from "@/lib/validators";
 
 export async function POST(request: Request) {
