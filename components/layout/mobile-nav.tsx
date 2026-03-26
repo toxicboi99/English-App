@@ -3,8 +3,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-import { Avatar } from "@/components/ui/avatar";
-import { LogoutButton } from "@/components/layout/logout-button";
 import { cn } from "@/lib/utils";
 
 const items = [
@@ -17,37 +15,13 @@ const items = [
   { href: "/practice-speaking", label: "Speaking" },
 ] as const;
 
-export function MobileNav({
-  canAccessAdmin,
-  user,
-}: {
-  canAccessAdmin: boolean;
-  user: {
-    name: string;
-    profileImage?: string | null;
-    level: string;
-    role: string;
-  };
-}) {
+export function MobileNav({ canAccessAdmin }: { canAccessAdmin: boolean }) {
   const pathname = usePathname();
   const navItems = canAccessAdmin ? [...items, { href: "/admin", label: "Admin" }] : items;
 
   return (
-    <div className="mb-6 space-y-4 lg:hidden">
-      <div className="panel flex items-center justify-between gap-3 px-4 py-3">
-        <div className="flex items-center gap-3">
-          <Avatar image={user.profileImage} name={user.name} size={40} />
-          <div>
-            <p className="font-semibold text-slate-950">{user.name}</p>
-            <p className="text-sm text-slate-500">
-              {user.level}
-              {canAccessAdmin ? " • Admin" : ""}
-            </p>
-          </div>
-        </div>
-        <LogoutButton className="shrink-0 px-4" variant="ghost" />
-      </div>
-      <div className="overflow-x-auto">
+    <div className="mb-6 lg:hidden">
+      <div className="overflow-x-auto pb-1">
         <div className="flex min-w-max gap-2">
           {navItems.map((item) => (
             <Link

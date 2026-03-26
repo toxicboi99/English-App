@@ -19,9 +19,9 @@ export default async function ProtectedLayout({
 
   return (
     <div className="mx-auto flex max-w-[1600px] gap-6 px-4 py-6 sm:px-6 lg:px-8">
-      <AppSidebar canAccessAdmin={canAccessAdmin} user={user} />
+      <AppSidebar canAccessAdmin={canAccessAdmin} />
       <main className="min-w-0 flex-1">
-        <MobileNav canAccessAdmin={canAccessAdmin} user={user} />
+        <MobileNav canAccessAdmin={canAccessAdmin} />
         {children}
       </main>
     </div>

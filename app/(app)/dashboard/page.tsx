@@ -9,10 +9,11 @@ import {
   Video,
 } from "lucide-react";
 
+import { LogoutButton } from "@/components/layout/logout-button";
+import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { LogoutButton } from "@/components/layout/logout-button";
 import { canAccessAdminPanel, getCurrentUser } from "@/lib/auth";
 import { getDashboardData } from "@/lib/data";
 import { formatRelative } from "@/lib/utils";
@@ -100,7 +101,25 @@ export default async function DashboardPage() {
                 Start a new practice video
               </Button>
             </Link>
-<LogoutButton className="border border-amber-200/40 bg-red-500 text-white hover:bg-red-600" />          </div>
+          </div>
+        </div>
+      </Card>
+
+      <Card className="rounded-[2rem] border border-slate-200/90 bg-white/90 p-5 sm:p-6">
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex items-center gap-4">
+            <Avatar image={user.profileImage} name={user.name} size={72} />
+            <div className="min-w-0">
+              <h2 className="truncate text-2xl font-semibold text-slate-950">{user.name}</h2>
+              <p className="mt-1 text-lg text-slate-700">
+                {user.level}
+                {canAccessAdmin ? " | Admin" : ""}
+              </p>
+              <p className="mt-3 break-all text-base text-slate-600">{user.email}</p>
+            </div>
+          </div>
+
+          <LogoutButton className="w-full border border-cyan-300 bg-white text-slate-950 hover:bg-cyan-50 sm:w-auto sm:min-w-[180px]" />
         </div>
       </Card>
 
@@ -170,7 +189,7 @@ export default async function DashboardPage() {
                     <div>
                       <p className="text-lg font-semibold text-slate-950">{post.title}</p>
                       <p className="mt-1 text-sm text-slate-500">
-                        {post.learningLevel} · {formatRelative(post.createdAt)}
+                        {post.learningLevel} | {formatRelative(post.createdAt)}
                       </p>
                     </div>
                     <Link href="/feed">
