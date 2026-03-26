@@ -1,4 +1,7 @@
 import Image from "next/image";
+import Link from "next/link";
+
+import { LegalLinks } from "@/components/legal/legal-links";
 
 export default function AuthLayout({
   children,
@@ -6,8 +9,8 @@ export default function AuthLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <main className="mx-auto flex min-h-screen max-w-6xl items-center px-6 py-10 lg:px-8">
-      <div className="relative grid w-full gap-8 lg:grid-cols-[1fr_1.1fr]">
+    <main className="mx-auto flex min-h-screen max-w-6xl items-start px-4 py-6 sm:px-6 sm:py-8 lg:items-center lg:px-8">
+      <div className="relative grid w-full gap-6 lg:grid-cols-[1fr_1.1fr] lg:gap-8">
         <div className="pointer-events-none absolute inset-0 -z-10">
           <div className="absolute -top-32 -left-32 h-[300px] w-[300px] rounded-full bg-amber-300/30 blur-[100px]" />
           <div className="absolute right-0 bottom-0 h-[320px] w-[320px] rounded-full bg-cyan-300/30 blur-[110px]" />
@@ -46,9 +49,32 @@ export default function AuthLayout({
           </div>
         </div>
 
-        <div className="relative rounded-[2.5rem] border border-white/80 bg-white/85 p-8 shadow-[0_10px_40px_rgba(15,23,42,0.08)] backdrop-blur-xl md:p-10">
-          <div className="pointer-events-none absolute inset-0 rounded-[2.5rem] bg-gradient-to-br from-white/60 to-transparent opacity-70" />
-          <div className="relative z-10">{children}</div>
+        <div className="relative rounded-[2rem] border border-white/80 bg-white/85 p-5 shadow-[0_10px_40px_rgba(15,23,42,0.08)] backdrop-blur-xl sm:p-8 md:p-10 lg:rounded-[2.5rem]">
+          <div className="pointer-events-none absolute inset-0 rounded-[2rem] bg-gradient-to-br from-white/60 to-transparent opacity-70 lg:rounded-[2.5rem]" />
+          <div className="relative z-10 space-y-6">
+            <div className="rounded-[1.75rem] border border-slate-900/10 bg-slate-950 p-5 text-amber-100 shadow-[0_18px_50px_rgba(15,23,42,0.18)] lg:hidden">
+              <Link
+                className="text-sm font-semibold tracking-[0.18em] text-amber-200 uppercase"
+                href="/"
+              >
+                SpeakUp
+              </Link>
+              <h1 className="mt-3 text-2xl font-bold leading-tight text-white">
+                Practice English with a safer, verified account flow.
+              </h1>
+              <p className="mt-3 text-sm leading-7 text-slate-300">
+                Sign in or create your account to keep your speaking videos, social
+                progress, and live debate access in one place.
+              </p>
+            </div>
+
+            <div>{children}</div>
+
+            <div className="flex flex-col gap-3 border-t border-slate-200/80 pt-5 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-slate-500">Need the basics first?</p>
+              <LegalLinks className="sm:justify-end" />
+            </div>
+          </div>
         </div>
       </div>
     </main>
