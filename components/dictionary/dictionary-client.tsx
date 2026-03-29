@@ -348,7 +348,7 @@ export function DictionaryClient({
                   </div>
                 ))
               ) : (
-                <p className="text-sm text-slate-500">Words you save will appear here.</p>
+                <p className="text-sm text-slate-500">Words you save will display here.</p>
               )}
             </div>
           </Card>
