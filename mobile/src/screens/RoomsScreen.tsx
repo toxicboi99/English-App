@@ -1,5 +1,12 @@
 import { useState } from "react";
-import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import {
+  Linking,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 
 import { api } from "../api";
 import {
@@ -17,7 +24,7 @@ import {
 } from "../components";
 import { useRemoteResource } from "../hooks/useRemoteResource";
 import { fonts, palette } from "../theme";
-import type { SessionUser } from "../types";
+import type { Room, SessionUser } from "../types";
 
 type RoomsScreenProps = {
   token: string;
@@ -34,6 +41,12 @@ const participantOptions = [
   { label: "3 people", value: "3" },
   { label: "4 people", value: "4" },
 ];
+
+const providerLabels: Record<Room["provider"], string> = {
+  HMS: "100ms-ready",
+  LIVEKIT: "LiveKit production",
+  WEBRTC: "Browser local preview",
+};
 
 export function RoomsScreen({ token }: RoomsScreenProps) {
   const { data, error, loading, refreshing, reload } = useRemoteResource(
@@ -67,8 +80,8 @@ export function RoomsScreen({ token }: RoomsScreenProps) {
       });
       setStatus(
         provider === "LIVEKIT"
-          ? "Room created in the live rooms table. Native RTC stage can be layered on next."
-          : "Browser-local practice room created in the live backend.",
+          ? "Room created. Join it from the list below and open the live stage."
+          : "Preview room created. Join it from the list below and open the stage.",
       );
       setName("");
       setTopic("");
@@ -77,9 +90,7 @@ export function RoomsScreen({ token }: RoomsScreenProps) {
       await reload();
     } catch (createError) {
       setStatus(
-        createError instanceof Error
-          ? createError.message
-          : "Unable to create room.",
+        createError instanceof Error ? createError.message : "Unable to create room.",
       );
     } finally {
       setIsCreating(false);
@@ -98,13 +109,35 @@ export function RoomsScreen({ token }: RoomsScreenProps) {
       await api.roomAction(token, { action, roomId });
       setStatus(
         action === "join"
-          ? "Room membership updated in the live backend."
+          ? "Room membership updated. You can open the stage now."
           : "You have left the room.",
       );
       await reload();
     } catch (actionError) {
       setStatus(
         actionError instanceof Error ? actionError.message : "Unable to update room.",
+      );
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function openRoomStage(room: Room) {
+    setBusyId(`open-${room.id}`);
+    setStatus("Opening the room stage in your browser...");
+
+    try {
+      await Linking.openURL(api.roomLaunchUrl(room.slug));
+      setStatus(
+        room.provider === "LIVEKIT"
+          ? "The LiveKit room stage is opening in your browser."
+          : "The browser-preview room stage is opening in your browser.",
+      );
+    } catch (openError) {
+      setStatus(
+        openError instanceof Error
+          ? openError.message
+          : "Unable to open the room stage.",
       );
     } finally {
       setBusyId(null);
@@ -120,19 +153,19 @@ export function RoomsScreen({ token }: RoomsScreenProps) {
       showsVerticalScrollIndicator={false}
     >
       <HeroCard
-        description="Create, join, and leave real debate room records from mobile. The app is already connected to the live room data model."
+        description="Create, join, and launch the same debate rooms used by the web app. Mobile now handles the real room workflow instead of only editing records."
         kicker="Debate Rooms"
-        title="Keep your speaking rooms in sync."
+        title="Keep your speaking rooms fully in sync."
       />
 
       <Card>
         <SectionTitle
-          subtitle="Room data is fully live. Media stage wiring can be added on top of these records next."
-          title="Mobile room control"
+          subtitle="Use LiveKit for real shared rooms. Use WebRTC when you only need a lighter browser-local practice stage."
+          title="Provider guide"
         />
         <Text style={styles.noteText}>
-          LiveKit rooms are stored as production-ready records. WebRTC rooms stay useful for
-          quick solo practice or preview mode.
+          After you join a room from mobile, tap Open stage to continue into the actual
+          room experience in your phone browser.
         </Text>
       </Card>
 
@@ -142,7 +175,7 @@ export function RoomsScreen({ token }: RoomsScreenProps) {
 
       <Card style={{ gap: 14 }}>
         <SectionTitle
-          subtitle="Create a room record from mobile using the same backend as the web app."
+          subtitle="Create a room with the same backend data model the web app uses."
           title="Create a room"
         />
         <TextField
@@ -184,7 +217,7 @@ export function RoomsScreen({ token }: RoomsScreenProps) {
       {data ? (
         <Card>
           <SectionTitle
-            subtitle="Real room records from the database."
+            subtitle="Real room records from the database with stage launch support."
             title="Available rooms"
           />
           {data.rooms.length ? (
@@ -192,7 +225,7 @@ export function RoomsScreen({ token }: RoomsScreenProps) {
               {data.rooms.map((room) => (
                 <View key={room.id} style={styles.roomCard}>
                   <View style={styles.roomHeader}>
-                    <View style={{ flex: 1 }}>
+                    <View style={styles.roomCopy}>
                       <Text style={styles.roomName}>{room.name}</Text>
                       <Text style={styles.roomTopic}>
                         {room.topic ||
@@ -201,7 +234,7 @@ export function RoomsScreen({ token }: RoomsScreenProps) {
                     </View>
                     <View style={styles.roomBadges}>
                       <Tag label={room.status} />
-                      <Tag label={room.provider} tone="soft" />
+                      <Tag label={providerLabels[room.provider]} tone="soft" />
                     </View>
                   </View>
 
@@ -214,9 +247,21 @@ export function RoomsScreen({ token }: RoomsScreenProps) {
                     <Text style={styles.hostName}>Hosted by {room.host.name}</Text>
                   </View>
 
-                  <Text style={styles.participantText}>
-                    {room.participants.length}/{room.maxParticipants} participants joined
-                  </Text>
+                  <View style={styles.participantWrap}>
+                    <Text style={styles.participantText}>
+                      {room.participants.length}/{room.maxParticipants} participants joined
+                    </Text>
+                    <View style={styles.avatarStack}>
+                      {room.participants.map((participant) => (
+                        <AvatarBubble
+                          key={participant.id}
+                          image={participant.user.profileImage}
+                          name={participant.user.name}
+                          size={32}
+                        />
+                      ))}
+                    </View>
+                  </View>
 
                   <View style={styles.roomActions}>
                     <AppButton
@@ -225,9 +270,18 @@ export function RoomsScreen({ token }: RoomsScreenProps) {
                       onPress={() => void roomAction("join", room.id, `join-${room.id}`)}
                       style={styles.flexButton}
                     />
+                    <AppButton
+                      disabled={!room.joinedByMe}
+                      label="Open stage"
+                      loading={busyId === `open-${room.id}`}
+                      onPress={() => void openRoomStage(room)}
+                      style={styles.flexButton}
+                      variant="soft"
+                    />
                     {room.joinedByMe ? (
                       <AppButton
                         label="Leave"
+                        loading={busyId === `leave-${room.id}`}
                         onPress={() => void roomAction("leave", room.id, `leave-${room.id}`)}
                         style={styles.flexButton}
                         variant="ghost"
@@ -250,6 +304,11 @@ export function RoomsScreen({ token }: RoomsScreenProps) {
 }
 
 const styles = StyleSheet.create({
+  avatarStack: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
   content: {
     gap: 16,
     paddingBottom: 28,
@@ -288,10 +347,14 @@ const styles = StyleSheet.create({
     fontFamily: fonts.body,
     fontSize: 13,
     fontWeight: "700",
+  },
+  participantWrap: {
+    gap: 10,
     marginTop: 14,
   },
   roomActions: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 10,
     marginTop: 14,
   },
@@ -304,6 +367,9 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     paddingHorizontal: 16,
     paddingVertical: 14,
+  },
+  roomCopy: {
+    flex: 1,
   },
   roomHeader: {
     flexDirection: "row",

@@ -121,7 +121,8 @@ export async function getRecordingPrompts(includeInactive = false) {
   }));
 }
 
-export async function getFriendsData(userId: string) {
+export async function getFriendsData(userId: string, search = "") {
+  const normalizedSearch = search.trim();
   const [directFriends, reverseFriends, incoming, outgoing, suggestions] =
     await prisma.$transaction([
       prisma.friendship.findMany({
@@ -192,11 +193,34 @@ export async function getFriendsData(userId: string) {
       }),
       prisma.user.findMany({
         where: {
-          NOT: {
-            id: userId,
-          },
+          AND: [
+            {
+              NOT: {
+                id: userId,
+              },
+            },
+            normalizedSearch
+              ? {
+                  OR: [
+                    {
+                      name: {
+                        contains: normalizedSearch,
+                        mode: "insensitive",
+                      },
+                    },
+                    {
+                      email: {
+                        contains: normalizedSearch,
+                        mode: "insensitive",
+                      },
+                    },
+                  ],
+                }
+              : {},
+          ],
         },
-        take: 8,
+        orderBy: { name: "asc" },
+        take: normalizedSearch ? 16 : 8,
         select: {
           id: true,
           name: true,

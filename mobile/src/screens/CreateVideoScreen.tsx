@@ -1,6 +1,15 @@
-import { startTransition, useEffect, useMemo, useState } from "react";
-import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
+import { useVideoPlayer, VideoView } from "expo-video";
+import { startTransition, useEffect, useMemo, useState } from "react";
+import {
+  Linking,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 
 import { api } from "../api";
 import {
@@ -72,6 +81,22 @@ function sanitizeFileName(value: string) {
   return cleaned || "speakup-practice";
 }
 
+function SelectedVideoPreview({ uri }: { uri: string }) {
+  const player = useVideoPlayer({ uri }, (instance) => {
+    instance.loop = true;
+    instance.muted = true;
+  });
+
+  return (
+    <VideoView
+      contentFit="cover"
+      nativeControls
+      player={player}
+      style={styles.videoPreview}
+    />
+  );
+}
+
 export function CreateVideoScreen({
   token,
   onNavigate,
@@ -88,19 +113,21 @@ export function CreateVideoScreen({
   );
   const [script, setScript] = useState("");
   const [status, setStatus] = useState<string | null>(null);
-  const [selectedAsset, setSelectedAsset] = useState<ImagePicker.ImagePickerAsset | null>(
-    null,
-  );
+  const [selectedAsset, setSelectedAsset] =
+    useState<ImagePicker.ImagePickerAsset | null>(null);
   const [uploadResult, setUploadResult] = useState<UploadResponse | null>(null);
   const [isImproving, setIsImproving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
+  const [isOpeningYouTube, setIsOpeningYouTube] = useState(false);
 
   const prompts = data?.prompts ?? [];
   const filteredPrompts = useMemo(
     () => prompts.filter((prompt) => prompt.level === learningLevel),
     [learningLevel, prompts],
   );
+  const selectedPrompt =
+    filteredPrompts.find((prompt) => prompt.id === selectedPromptId) ?? null;
 
   useEffect(() => {
     if (!filteredPrompts.length) {
@@ -153,7 +180,7 @@ export function CreateVideoScreen({
 
     clearUploadState();
     setSelectedAsset(result.assets[0] ?? null);
-    setStatus("Video selected. Upload it to YouTube when your title and description are ready.");
+    setStatus("Video selected. Review the teleprompter and publish details before uploading.");
   }
 
   async function recordVideo() {
@@ -178,7 +205,7 @@ export function CreateVideoScreen({
 
     clearUploadState();
     setSelectedAsset(result.assets[0] ?? null);
-    setStatus("Recording captured. Review the details below, then upload it.");
+    setStatus("Recording captured. Upload it when the title and description are ready.");
   }
 
   async function improveDescription() {
@@ -205,6 +232,30 @@ export function CreateVideoScreen({
     }
   }
 
+  async function openYouTubeConnect() {
+    if (!data?.youtubeConnectUrl) {
+      setStatus("The backend did not return a YouTube connection URL.");
+      return;
+    }
+
+    setIsOpeningYouTube(true);
+
+    try {
+      await Linking.openURL(data.youtubeConnectUrl);
+      setStatus(
+        "The YouTube connection flow is opening in your browser. Return here after the account is connected.",
+      );
+    } catch (openError) {
+      setStatus(
+        openError instanceof Error
+          ? openError.message
+          : "Unable to open the YouTube connection flow.",
+      );
+    } finally {
+      setIsOpeningYouTube(false);
+    }
+  }
+
   async function uploadVideo() {
     if (!selectedAsset?.uri) {
       setStatus("Choose or record a video before uploading.");
@@ -223,7 +274,7 @@ export function CreateVideoScreen({
 
     if (!data?.canUpload) {
       setStatus(
-        "YouTube upload is not connected for this account yet. Connect YouTube on web first, then try again from mobile.",
+        "YouTube is not connected for this account yet. Connect it first, then try uploading again.",
       );
       return;
     }
@@ -301,20 +352,22 @@ export function CreateVideoScreen({
       showsVerticalScrollIndicator={false}
     >
       <HeroCard
-        description="Choose a teleprompter prompt, capture a clip on your phone, upload it to YouTube, and publish it into the same feed used by the web app."
+        description="Choose a teleprompter prompt, capture a clip on your phone, preview it, upload it to YouTube, and publish it into the same feed used by the web app."
         kicker="Video Studio"
-        title="Create real speaking videos from mobile."
+        title="Create polished speaking videos from mobile."
       />
 
       {status ? <StatusNotice message={status} tone="info" /> : null}
       {error ? <StatusNotice message={error} tone="danger" /> : null}
-      {loading && !data ? <LoadingState label="Loading studio prompts and upload status..." /> : null}
+      {loading && !data ? (
+        <LoadingState label="Loading studio prompts and upload status..." />
+      ) : null}
 
       {data ? (
         <>
           <Card style={{ gap: 14 }}>
             <SectionTitle
-              subtitle="Match the same prompt levels used in the web studio."
+              subtitle="Match the same prompt levels and teleprompter scripts used in the web studio."
               title="Teleprompter prompt"
             />
             <View>
@@ -369,6 +422,13 @@ export function CreateVideoScreen({
               />
             )}
 
+            <View style={styles.teleprompterCard}>
+              <Text style={styles.teleprompterLabel}>Teleprompter preview</Text>
+              <Text style={styles.teleprompterText}>
+                {script.trim() || "Choose a prompt or write your own script below."}
+              </Text>
+            </View>
+
             <TextField
               label="Prompt script"
               multiline
@@ -376,6 +436,51 @@ export function CreateVideoScreen({
               placeholder="Write the script you want to speak on camera."
               value={script}
             />
+          </Card>
+
+          <Card style={{ gap: 14 }}>
+            <SectionTitle
+              subtitle="Capture a new take or pick an existing clip from your phone."
+              title="Video source"
+            />
+            <View style={styles.captureRow}>
+              <AppButton
+                label="Record video"
+                onPress={() => void recordVideo()}
+                style={styles.flexButton}
+              />
+              <AppButton
+                label="Choose clip"
+                onPress={() => void chooseFromLibrary()}
+                style={styles.flexButton}
+                variant="soft"
+              />
+            </View>
+
+            {selectedAsset?.uri ? (
+              <View style={styles.previewCard}>
+                <SelectedVideoPreview uri={selectedAsset.uri} />
+                <View style={styles.assetMetaWrap}>
+                  <Text style={styles.assetTitle}>
+                    {selectedAsset.fileName ?? "Selected practice clip"}
+                  </Text>
+                  <View style={styles.assetMetaRow}>
+                    <Tag label={selectedAsset.type ?? "video"} tone="soft" />
+                    <Tag label={formatDuration(selectedAsset.duration)} />
+                    <Tag label={formatFileSize(selectedAsset.fileSize)} />
+                  </View>
+                  <Text style={styles.assetMetaText}>
+                    {selectedAsset.width ?? "?"} x {selectedAsset.height ?? "?"} |{" "}
+                    {selectedAsset.mimeType ?? "video/mp4"}
+                  </Text>
+                </View>
+              </View>
+            ) : (
+              <EmptyState
+                description="No clip selected yet. Record from the camera or choose a video from the gallery."
+                title="No video chosen"
+              />
+            )}
           </Card>
 
           <Card style={{ gap: 14 }}>
@@ -406,50 +511,29 @@ export function CreateVideoScreen({
 
           <Card style={{ gap: 14 }}>
             <SectionTitle
-              subtitle="Capture a new take or pick an existing clip from your phone."
-              title="Video source"
+              subtitle="Connect YouTube once, then your uploads and publishing will work from mobile too."
+              title="Upload and publish"
             />
-            <View style={styles.captureRow}>
-              <AppButton
-                label="Record video"
-                onPress={() => void recordVideo()}
-                style={styles.flexButton}
-              />
-              <AppButton
-                label="Choose clip"
-                onPress={() => void chooseFromLibrary()}
-                style={styles.flexButton}
-                variant="soft"
-              />
-            </View>
 
-            {selectedAsset ? (
-              <View style={styles.assetCard}>
-                <Text style={styles.assetTitle}>
-                  {selectedAsset.fileName ?? "Selected practice clip"}
-                </Text>
-                <View style={styles.assetMetaRow}>
-                  <Tag label={selectedAsset.type ?? "video"} tone="soft" />
-                  <Tag label={formatDuration(selectedAsset.duration)} />
-                  <Tag label={formatFileSize(selectedAsset.fileSize)} />
-                </View>
-                <Text style={styles.assetMetaText}>
-                  {selectedAsset.width} x {selectedAsset.height} • {selectedAsset.mimeType ?? "video/mp4"}
-                </Text>
-              </View>
-            ) : (
-              <EmptyState
-                description="No clip selected yet. Record from the camera or choose a video from the gallery."
-                title="No video chosen"
-              />
-            )}
-
-            {!data.canUpload ? (
+            {data.canUpload ? (
               <StatusNotice
-                message="YouTube is not connected for this account yet. Connect it from the web app once, then mobile uploads will start working too."
-                tone="danger"
+                message="YouTube is connected for this account. You can upload and publish from mobile."
+                tone="success"
               />
-            ) : null}
+            ) : (
+              <View style={styles.connectCard}>
+                <Text style={styles.connectCopy}>
+                  YouTube is not connected for this account yet. Open the browser flow once,
+                  finish the connection, then come back here and refresh.
+                </Text>
+                <AppButton
+                  label={isOpeningYouTube ? "Opening..." : "Connect YouTube"}
+                  loading={isOpeningYouTube}
+                  onPress={() => void openYouTubeConnect()}
+                  variant="soft"
+                />
+              </View>
+            )}
 
             {uploadResult ? (
               <View style={styles.assetCard}>
@@ -461,12 +545,14 @@ export function CreateVideoScreen({
 
             <View style={styles.captureRow}>
               <AppButton
+                disabled={!selectedAsset || isUploading || !data.canUpload}
                 label={isUploading ? "Uploading..." : "Upload to YouTube"}
                 loading={isUploading}
                 onPress={() => void uploadVideo()}
                 style={styles.flexButton}
               />
               <AppButton
+                disabled={!uploadResult || isPublishing}
                 label={isPublishing ? "Publishing..." : "Publish to feed"}
                 loading={isPublishing}
                 onPress={() => void publishPost()}
@@ -500,6 +586,11 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 19,
   },
+  assetMetaWrap: {
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
   assetTitle: {
     color: palette.ink,
     fontFamily: fonts.display,
@@ -509,6 +600,19 @@ const styles = StyleSheet.create({
   captureRow: {
     flexDirection: "row",
     gap: 10,
+  },
+  connectCard: {
+    backgroundColor: palette.surfaceMuted,
+    borderRadius: 22,
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  connectCopy: {
+    color: palette.inkSoft,
+    fontFamily: fonts.body,
+    fontSize: 14,
+    lineHeight: 22,
   },
   content: {
     gap: 16,
@@ -525,6 +629,11 @@ const styles = StyleSheet.create({
   },
   flexButton: {
     flex: 1,
+  },
+  previewCard: {
+    backgroundColor: palette.surfaceMuted,
+    borderRadius: 22,
+    overflow: "hidden",
   },
   promptCard: {
     backgroundColor: palette.surfaceMuted,
@@ -565,5 +674,31 @@ const styles = StyleSheet.create({
   },
   promptTitleActive: {
     color: palette.cobaltDeep,
+  },
+  teleprompterCard: {
+    backgroundColor: "#0d1a2b",
+    borderRadius: 24,
+    gap: 10,
+    paddingHorizontal: 18,
+    paddingVertical: 18,
+  },
+  teleprompterLabel: {
+    color: "#ffd9b8",
+    fontFamily: fonts.body,
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+  },
+  teleprompterText: {
+    color: palette.white,
+    fontFamily: fonts.body,
+    fontSize: 15,
+    lineHeight: 24,
+  },
+  videoPreview: {
+    backgroundColor: palette.ink,
+    height: 220,
+    width: "100%",
   },
 });

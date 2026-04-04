@@ -10,6 +10,8 @@ const config: ExpoConfig = {
   icon: "./assets/speakup-logo.png",
   assetBundlePatterns: ["**/*"],
   plugins: [
+    "expo-audio",
+    "expo-video",
     [
       "expo-splash-screen",
       {

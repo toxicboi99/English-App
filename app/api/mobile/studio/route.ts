@@ -9,10 +9,13 @@ export async function GET(request: Request) {
     const canUpload =
       user.oauthAccounts.some((account) => account.provider === "YOUTUBE") ||
       Boolean(process.env.YOUTUBE_REFRESH_TOKEN);
+    const baseUrl = new URL(request.url);
+    const youtubeConnectUrl = new URL("/api/youtube/oauth/start", baseUrl).toString();
 
     return apiSuccess({
       canUpload,
       prompts,
+      youtubeConnectUrl,
     });
   } catch (error) {
     return handleApiError(error);

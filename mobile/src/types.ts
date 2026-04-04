@@ -56,6 +56,7 @@ export type RecordingPrompt = {
 
 export type StudioData = {
   canUpload: boolean;
+  youtubeConnectUrl: string;
   prompts: RecordingPrompt[];
 };
 
@@ -77,6 +78,10 @@ export type SpeakingFeedback = {
   missingWords: string[];
   extraWords: string[];
   feedback: string;
+};
+
+export type TranscriptionResponse = {
+  transcript: string;
 };
 
 export type FeedPost = {

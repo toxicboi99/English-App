@@ -7,7 +7,8 @@ import { friendActionSchema } from "@/lib/validators";
 export async function GET(request: Request) {
   try {
     const user = await requireMobileSessionUser(request);
-    const data = await getFriendsData(user.id);
+    const search = new URL(request.url).searchParams.get("q")?.trim() ?? "";
+    const data = await getFriendsData(user.id, search);
     return apiSuccess(data);
   } catch (error) {
     return handleApiError(error);

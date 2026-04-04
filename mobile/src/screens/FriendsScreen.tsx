@@ -12,6 +12,7 @@ import {
   SectionTitle,
   StatusNotice,
   Tag,
+  TextField,
 } from "../components";
 import { useRemoteResource } from "../hooks/useRemoteResource";
 import { fonts, palette } from "../theme";
@@ -24,9 +25,11 @@ type FriendsScreenProps = {
 };
 
 export function FriendsScreen({ token }: FriendsScreenProps) {
+  const [searchDraft, setSearchDraft] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const { data, error, loading, refreshing, reload } = useRemoteResource(
-    () => api.friends(token),
-    [token],
+    () => api.friends(token, searchQuery),
+    [token, searchQuery],
   );
   const [status, setStatus] = useState<string | null>(null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
@@ -61,6 +64,15 @@ export function FriendsScreen({ token }: FriendsScreenProps) {
     }
   }
 
+  function applySearch() {
+    setSearchQuery(searchDraft.trim());
+  }
+
+  function clearSearch() {
+    setSearchDraft("");
+    setSearchQuery("");
+  }
+
   return (
     <ScrollView
       contentContainerStyle={styles.content}
@@ -70,14 +82,50 @@ export function FriendsScreen({ token }: FriendsScreenProps) {
       showsVerticalScrollIndicator={false}
     >
       <HeroCard
-        description="These lists are powered by the real friendship tables, pending requests, and user graph in your database."
+        description="Search real learners by name or email, send requests, accept invitations, and manage the same friendship graph used by the web app."
         kicker="Friends"
         title="Build a strong practice circle."
       />
 
       {status ? <StatusNotice message={status} tone="info" /> : null}
       {error ? <StatusNotice message={error} tone="danger" /> : null}
-      {loading && !data ? <LoadingState label="Loading your real friend graph..." /> : null}
+      {loading && !data ? <LoadingState label="Loading your live friend graph..." /> : null}
+
+      <Card style={{ gap: 14 }}>
+        <SectionTitle
+          subtitle="Search the live user table by name or email before sending a friend request."
+          title="Find learners"
+        />
+        <TextField
+          autoCapitalize="none"
+          label="Search by name or email"
+          onChangeText={setSearchDraft}
+          placeholder="Search learners"
+          value={searchDraft}
+        />
+        <View style={styles.actionRow}>
+          <AppButton
+            label="Search"
+            onPress={applySearch}
+            style={styles.flexButton}
+          />
+          <AppButton
+            label="Clear"
+            onPress={clearSearch}
+            style={styles.flexButton}
+            variant="ghost"
+          />
+        </View>
+        {searchQuery ? (
+          <Text style={styles.helperText}>
+            Showing results for "{searchQuery}".
+          </Text>
+        ) : (
+          <Text style={styles.helperText}>
+            Leave the search empty to see the default friend suggestions.
+          </Text>
+        )}
+      </Card>
 
       {data ? (
         <>
@@ -107,7 +155,7 @@ export function FriendsScreen({ token }: FriendsScreenProps) {
               </View>
             ) : (
               <EmptyState
-                description="No accepted friendships yet. Use the suggestions below to send real requests."
+                description="No accepted friendships yet. Use the search and suggestions below to send real requests."
                 title="No connections yet"
               />
             )}
@@ -136,7 +184,7 @@ export function FriendsScreen({ token }: FriendsScreenProps) {
                           </Text>
                         </View>
                       </View>
-                      <View style={styles.actions}>
+                      <View style={styles.actionRow}>
                         <AppButton
                           label="Accept"
                           loading={busyKey === `accept-${request.id}`}
@@ -174,8 +222,58 @@ export function FriendsScreen({ token }: FriendsScreenProps) {
 
           <Card>
             <SectionTitle
-              subtitle="People you can invite right now from the live user table."
-              title="Suggestions"
+              subtitle="Requests you have already sent."
+              title="Outgoing invitations"
+            />
+            {data.outgoing.length ? (
+              <View style={styles.sectionList}>
+                {data.outgoing.map((request) =>
+                  request.receiver ? (
+                    <View key={request.id} style={styles.actionCard}>
+                      <View style={styles.personRow}>
+                        <AvatarBubble
+                          image={request.receiver.profileImage}
+                          name={request.receiver.name}
+                          size={46}
+                        />
+                        <View style={styles.personText}>
+                          <Text style={styles.personName}>{request.receiver.name}</Text>
+                          <Text style={styles.personMeta}>
+                            {levelLabel(request.receiver.level)}
+                          </Text>
+                        </View>
+                      </View>
+                      <AppButton
+                        label="Cancel request"
+                        loading={busyKey === `cancel-${request.id}`}
+                        onPress={() =>
+                          void performAction(`cancel-${request.id}`, {
+                            action: "cancel",
+                            requestId: request.id,
+                          })
+                        }
+                        variant="ghost"
+                      />
+                    </View>
+                  ) : null,
+                )}
+              </View>
+            ) : (
+              <EmptyState
+                description="You do not have any pending outgoing requests."
+                title="No outgoing invitations"
+              />
+            )}
+          </Card>
+
+          <Card>
+            <SectionTitle
+              subtitle={
+                searchQuery
+                  ? "Search results from the live user table."
+                  : "Suggested learners from the live user table."
+              }
+              title={searchQuery ? "Search results" : "Suggestions"}
             />
             {data.suggestions.length ? (
               <View style={styles.sectionList}>
@@ -192,7 +290,7 @@ export function FriendsScreen({ token }: FriendsScreenProps) {
                         <Text style={styles.personMeta}>{candidate.email}</Text>
                       </View>
                     </View>
-                    <View style={styles.actions}>
+                    <View style={styles.actionRow}>
                       <Tag label={levelLabel(candidate.level)} />
                       <AppButton
                         label="Send request"
@@ -203,7 +301,7 @@ export function FriendsScreen({ token }: FriendsScreenProps) {
                             userId: candidate.id,
                           })
                         }
-                        style={styles.requestButton}
+                        style={styles.flexButton}
                         variant="soft"
                       />
                     </View>
@@ -212,8 +310,12 @@ export function FriendsScreen({ token }: FriendsScreenProps) {
               </View>
             ) : (
               <EmptyState
-                description="Suggestions will appear automatically as more real learners join the app."
-                title="No suggestions right now"
+                description={
+                  searchQuery
+                    ? "No learner matched that search. Try a different name or email."
+                    : "Suggestions will appear automatically as more real learners join the app."
+                }
+                title={searchQuery ? "No matches found" : "No suggestions right now"}
               />
             )}
           </Card>
@@ -231,7 +333,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
   },
-  actions: {
+  actionRow: {
     flexDirection: "row",
     gap: 10,
   },
@@ -241,6 +343,12 @@ const styles = StyleSheet.create({
   },
   flexButton: {
     flex: 1,
+  },
+  helperText: {
+    color: palette.inkSoft,
+    fontFamily: fonts.body,
+    fontSize: 13,
+    lineHeight: 20,
   },
   personCard: {
     alignItems: "center",
@@ -272,9 +380,6 @@ const styles = StyleSheet.create({
   personText: {
     flex: 1,
     gap: 4,
-  },
-  requestButton: {
-    flex: 1,
   },
   sectionList: {
     gap: 12,

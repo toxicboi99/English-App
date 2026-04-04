@@ -12,6 +12,7 @@ import type {
   SessionUser,
   SpeakingFeedback,
   StudioData,
+  TranscriptionResponse,
   UploadResponse,
 } from "./types";
 
@@ -226,8 +227,11 @@ export const api = {
       body: { postId, content },
     });
   },
-  friends(token: string) {
-    return request<FriendsResponse>("/friends", { token });
+  friends(token: string, query = "") {
+    const suffix = query.trim()
+      ? `?q=${encodeURIComponent(query.trim())}`
+      : "";
+    return request<FriendsResponse>(`/friends${suffix}`, { token });
   },
   friendAction(
     token: string,
@@ -288,6 +292,13 @@ export const api = {
   rooms(token: string) {
     return request<RoomsResponse>("/rooms", { token });
   },
+  transcribeSpeech(token: string, formData: FormData) {
+    return request<TranscriptionResponse>("/ai/transcribe", {
+      method: "POST",
+      token,
+      body: formData,
+    });
+  },
   roomAction(
     token: string,
     body:
@@ -308,6 +319,11 @@ export const api = {
       token,
       body,
     });
+  },
+  roomLaunchUrl(slug: string) {
+    const launchUrl = new URL("/api/mobile/rooms/launch", `${apiOrigin}/`);
+    launchUrl.searchParams.set("slug", slug);
+    return launchUrl.toString();
   },
   apiOrigin,
 };

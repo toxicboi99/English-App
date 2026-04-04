@@ -1,5 +1,13 @@
+import { RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync, useAudioRecorder, useAudioRecorderState } from "expo-audio";
 import { startTransition, useEffect, useMemo, useState } from "react";
-import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import {
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 
 import { api } from "../api";
 import {
@@ -16,7 +24,12 @@ import {
 } from "../components";
 import { useRemoteResource } from "../hooks/useRemoteResource";
 import { fonts, palette } from "../theme";
-import type { AppScreenKey, LearningLevel, RecordingPrompt, SessionUser } from "../types";
+import type {
+  AppScreenKey,
+  LearningLevel,
+  RecordingPrompt,
+  SessionUser,
+} from "../types";
 import { levelLabel } from "../utils";
 
 type PracticeSpeakingScreenProps = {
@@ -32,11 +45,21 @@ const levelOptions = [
   { label: "Fluent", value: "FLUENT" },
 ];
 
+function formatRecordingDuration(durationMillis: number) {
+  const totalSeconds = Math.max(0, Math.round(durationMillis / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
 export function PracticeSpeakingScreen({ token }: PracticeSpeakingScreenProps) {
   const { data, error, loading, refreshing, reload } = useRemoteResource(
     () => api.studio(token),
     [token],
   );
+  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const recorderState = useAudioRecorderState(recorder, 250);
   const [learningLevel, setLearningLevel] = useState<LearningLevel>("BEGINNER");
   const [selectedPromptId, setSelectedPromptId] = useState<string | null>(null);
   const [targetText, setTargetText] = useState("");
@@ -44,6 +67,7 @@ export function PracticeSpeakingScreen({ token }: PracticeSpeakingScreenProps) {
   const [status, setStatus] = useState<string | null>(null);
   const [isScoring, setIsScoring] = useState(false);
   const [isImproving, setIsImproving] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
   const [feedback, setFeedback] = useState<Awaited<
     ReturnType<typeof api.speakingFeedback>
   > | null>(null);
@@ -56,6 +80,7 @@ export function PracticeSpeakingScreen({ token }: PracticeSpeakingScreenProps) {
     () => prompts.filter((prompt) => prompt.level === learningLevel),
     [learningLevel, prompts],
   );
+  const selectedPrompt = filteredPrompts.find((prompt) => prompt.id === selectedPromptId) ?? null;
 
   useEffect(() => {
     if (!filteredPrompts.length) {
@@ -81,6 +106,94 @@ export function PracticeSpeakingScreen({ token }: PracticeSpeakingScreenProps) {
     });
   }
 
+  async function transcribeRecording(recordingUri: string) {
+    setIsTranscribing(true);
+    setStatus("Transcribing your voice...");
+
+    const formData = new FormData();
+    formData.append("language", "en");
+    formData.append("file", {
+      uri: recordingUri,
+      name: `speakup-${Date.now()}.m4a`,
+      type: "audio/m4a",
+    } as never);
+
+    try {
+      const result = await api.transcribeSpeech(token, formData);
+      setSpokenText(result.transcript);
+      setStatus("Transcript ready. Generate a score to compare it with the prompt.");
+    } catch (transcribeError) {
+      setStatus(
+        transcribeError instanceof Error
+          ? transcribeError.message
+          : "Unable to transcribe your recording right now.",
+      );
+    } finally {
+      setIsTranscribing(false);
+      await setAudioModeAsync({
+        allowsRecording: false,
+        interruptionMode: "duckOthers",
+        playsInSilentMode: true,
+        shouldPlayInBackground: false,
+      }).catch(() => null);
+    }
+  }
+
+  async function startListening() {
+    setFeedback(null);
+    setImprovedText(null);
+
+    const permission = await requestRecordingPermissionsAsync();
+
+    if (!permission.granted) {
+      setStatus("Allow microphone access so SpeakUp can listen and transcribe what you say.");
+      return;
+    }
+
+    try {
+      await setAudioModeAsync({
+        allowsRecording: true,
+        interruptionMode: "duckOthers",
+        playsInSilentMode: true,
+        shouldPlayInBackground: false,
+      });
+      await recorder.prepareToRecordAsync();
+      recorder.record();
+      setStatus("Listening... speak the sentence out loud.");
+    } catch (recordingError) {
+      setStatus(
+        recordingError instanceof Error
+          ? recordingError.message
+          : "Unable to start microphone recording.",
+      );
+    }
+  }
+
+  async function stopListening() {
+    if (!recorderState.isRecording) {
+      return;
+    }
+
+    try {
+      await recorder.stop();
+      const recordingUri = recorder.uri ?? recorder.getStatus().url;
+
+      if (!recordingUri) {
+        setStatus("Recording finished, but no audio file was saved. Please try again.");
+        return;
+      }
+
+      setStatus("Listening stopped. Preparing your transcript...");
+      await transcribeRecording(recordingUri);
+    } catch (stopError) {
+      setStatus(
+        stopError instanceof Error
+          ? stopError.message
+          : "Unable to finish the recording.",
+      );
+    }
+  }
+
   async function generateScore() {
     if (targetText.trim().length < 2) {
       setStatus("Add the target sentence or speaking prompt first.");
@@ -88,7 +201,7 @@ export function PracticeSpeakingScreen({ token }: PracticeSpeakingScreenProps) {
     }
 
     if (spokenText.trim().length < 1) {
-      setStatus("Type what you actually said before generating a score.");
+      setStatus("Record yourself or type the transcript before generating a score.");
       return;
     }
 
@@ -114,7 +227,7 @@ export function PracticeSpeakingScreen({ token }: PracticeSpeakingScreenProps) {
     const text = spokenText.trim() || targetText.trim();
 
     if (text.length < 2) {
-      setStatus("Type or choose a sentence before requesting AI feedback.");
+      setStatus("Record or type a sentence before requesting AI feedback.");
       return;
     }
 
@@ -145,9 +258,9 @@ export function PracticeSpeakingScreen({ token }: PracticeSpeakingScreenProps) {
       showsVerticalScrollIndicator={false}
     >
       <HeroCard
-        description="Use the same speaking prompts as the web app, compare what you said against the target text, and review score-based feedback from the live backend."
+        description="Use the same speaking prompts as the web app, record your voice from the phone, transcribe it, and compare it against the target sentence."
         kicker="Speaking Practice"
-        title="Train your speaking with score feedback."
+        title="Train your speaking with real voice capture."
       />
 
       {status ? <StatusNotice message={status} tone="info" /> : null}
@@ -216,9 +329,21 @@ export function PracticeSpeakingScreen({ token }: PracticeSpeakingScreenProps) {
 
           <Card style={{ gap: 14 }}>
             <SectionTitle
-              subtitle="Write the sentence you wanted to say and the sentence you actually spoke."
-              title="Practice input"
+              subtitle="Record your voice first, then edit the transcript only if needed."
+              title="Voice capture"
             />
+            <View style={styles.recordingSummary}>
+              <Tag
+                label={
+                  recorderState.isRecording ? "Listening live" : "Microphone idle"
+                }
+                tone={recorderState.isRecording ? "success" : "soft"}
+              />
+              <Tag label={`Duration ${formatRecordingDuration(recorderState.durationMillis)}`} />
+              {selectedPrompt ? (
+                <Tag label={selectedPrompt.title} tone="soft" />
+              ) : null}
+            </View>
             <TextField
               label="Target text"
               multiline
@@ -226,21 +351,49 @@ export function PracticeSpeakingScreen({ token }: PracticeSpeakingScreenProps) {
               placeholder="Write the sentence or paragraph you want to practice."
               value={targetText}
             />
+            <View style={styles.actionRow}>
+              <AppButton
+                disabled={recorderState.isRecording || isTranscribing}
+                label="Start listening"
+                onPress={() => void startListening()}
+                style={styles.flexButton}
+              />
+              <AppButton
+                disabled={!recorderState.isRecording}
+                label="Stop"
+                onPress={() => void stopListening()}
+                style={styles.flexButton}
+                variant="ghost"
+              />
+            </View>
+            <Text style={styles.helperText}>
+              Speak clearly into your phone. Once you stop recording, SpeakUp will transcribe
+              your voice and place it into the transcript box below.
+            </Text>
+          </Card>
+
+          <Card style={{ gap: 14 }}>
+            <SectionTitle
+              subtitle="This transcript is filled from your recording and stays editable."
+              title="What SpeakUp heard"
+            />
             <TextField
-              label="What you said"
+              label="Transcript"
               multiline
               onChangeText={setSpokenText}
-              placeholder="Type the transcript of what you actually said."
+              placeholder="Your spoken transcript will appear here after recording."
               value={spokenText}
             />
             <View style={styles.actionRow}>
               <AppButton
+                disabled={isScoring || isTranscribing}
                 label={isScoring ? "Scoring..." : "Generate score"}
                 loading={isScoring}
                 onPress={() => void generateScore()}
                 style={styles.flexButton}
               />
               <AppButton
+                disabled={isImproving || isTranscribing}
                 label={isImproving ? "Improving..." : "Improve sentence"}
                 loading={isImproving}
                 onPress={() => void improveSentence()}
@@ -287,10 +440,7 @@ export function PracticeSpeakingScreen({ token }: PracticeSpeakingScreenProps) {
 
           {improvedText ? (
             <Card style={styles.improvedCard}>
-              <SectionTitle
-                subtitle="AI writing feedback"
-                title="Improved sentence"
-              />
+              <SectionTitle subtitle="AI writing feedback" title="Improved sentence" />
               <Text style={styles.improvedSentence}>{improvedText.correctedText}</Text>
               {improvedText.explanation ? (
                 <Text style={styles.improvedExplanation}>{improvedText.explanation}</Text>
@@ -345,6 +495,12 @@ const styles = StyleSheet.create({
   },
   flexButton: {
     flex: 1,
+  },
+  helperText: {
+    color: palette.inkSoft,
+    fontFamily: fonts.body,
+    fontSize: 13,
+    lineHeight: 20,
   },
   improvedCard: {
     backgroundColor: "#fff6df",
@@ -407,6 +563,11 @@ const styles = StyleSheet.create({
   },
   promptTitleActive: {
     color: palette.cobaltDeep,
+  },
+  recordingSummary: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
   },
   scoreCopy: {
     color: palette.cobaltDeep,
