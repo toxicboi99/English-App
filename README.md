@@ -52,6 +52,31 @@ npm run dev
 
 Then open `http://localhost:3000`.
 
+## Mobile App
+
+This repository now includes a React Native client in [`mobile`](./mobile) built with Expo.
+
+- Uses the SpeakUp logo for splash/loading
+- Opens into a mobile side-menu layout
+- Connects to live backend routes under `/api/mobile`
+- Uses real login/register tokens instead of demo data
+
+Basic mobile flow:
+
+```bash
+cd mobile
+npm install
+npm run start
+```
+
+Set `EXPO_PUBLIC_API_BASE_URL` in `mobile/.env` to your backend origin, for example:
+
+```bash
+EXPO_PUBLIC_API_BASE_URL=http://10.0.2.2:3000
+```
+
+Use your LAN IP instead of `10.0.2.2` when testing on a physical phone.
+
 ## Database Notes
 
 - Prisma schema: `prisma/schema.prisma`

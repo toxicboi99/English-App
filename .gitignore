@@ -1,9 +1,12 @@
 # dependencies
 /node_modules
+/mobile/node_modules
 
 # next
 /.next
 /out
+/mobile/.expo
+/mobile/dist
 
 # production
 /build
@@ -22,6 +25,8 @@ pnpm-debug.log*
 .env
 .env.local
 .env.production
+/mobile/.env
+/mobile/.env.local
 
 # prisma
 /prisma/dev.db

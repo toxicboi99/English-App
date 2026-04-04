@@ -23,7 +23,6 @@ export default function LoginPage() {
       <SignIn
         appearance={clerkAppearance}
         fallbackRedirectUrl="/dashboard"
-        forceRedirectUrl="/dashboard"
         path="/login"
         routing="path"
         signUpUrl="/register"
