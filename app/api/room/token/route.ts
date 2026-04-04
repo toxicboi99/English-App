@@ -4,6 +4,7 @@ import { z } from "zod";
 import { apiError, apiSuccess, handleApiError } from "@/lib/api";
 import { requireCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { cleanupExpiredRooms } from "@/lib/rooms";
 
 const roomTokenSchema = z.object({
   roomId: z.string().min(1),
@@ -12,6 +13,7 @@ const roomTokenSchema = z.object({
 export async function POST(request: Request) {
   try {
     const user = await requireCurrentUser();
+    await cleanupExpiredRooms();
     const body = roomTokenSchema.parse(await request.json());
     const room = await prisma.room.findUnique({
       where: { id: body.roomId },

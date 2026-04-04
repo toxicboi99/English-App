@@ -1,6 +1,7 @@
 import { getEffectiveUserRole } from "@/lib/auth";
 import { defaultRecordingPrompts } from "@/lib/constants";
 import { prisma } from "@/lib/prisma";
+import { cleanupExpiredRooms } from "@/lib/rooms";
 
 export async function getDashboardData(userId: string) {
   const [postsCount, wordsCount, pendingFriends, activeRooms, latestPosts] =
@@ -310,6 +311,8 @@ export async function getDictionaryData(userId: string, search = "") {
 }
 
 export async function getRoomsData(userId: string) {
+  await cleanupExpiredRooms();
+
   const rooms = await prisma.room.findMany({
     orderBy: { createdAt: "desc" },
     take: 12,

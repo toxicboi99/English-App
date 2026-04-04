@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { RoomStage } from "@/components/rooms/room-stage";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { cleanupExpiredRooms } from "@/lib/rooms";
 
 export default async function RoomPage({
   params,
@@ -14,6 +15,8 @@ export default async function RoomPage({
   if (!user) {
     return null;
   }
+
+  await cleanupExpiredRooms();
 
   const { slug } = await params;
   const room = await prisma.room.findUnique({

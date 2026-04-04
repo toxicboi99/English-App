@@ -8,6 +8,7 @@ import type {
   FeedResponse,
   FriendsResponse,
   GrammarFeedback,
+  Room,
   RoomsResponse,
   SessionUser,
   SpeakingFeedback,
@@ -314,11 +315,16 @@ export const api = {
           provider: "WEBRTC" | "LIVEKIT";
         },
   ) {
-    return request<{ success?: boolean; room?: unknown }>("/rooms", {
+    return request<{ success?: boolean; room?: Room }>("/rooms", {
       method: "POST",
       token,
       body,
     });
+  },
+  roomStageUrl(roomId: string) {
+    const stageUrl = new URL("/api/mobile/rooms/stage", `${apiOrigin}/`);
+    stageUrl.searchParams.set("roomId", roomId);
+    return stageUrl.toString();
   },
   roomLaunchUrl(slug: string) {
     const launchUrl = new URL("/api/mobile/rooms/launch", `${apiOrigin}/`);

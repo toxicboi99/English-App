@@ -10,6 +10,14 @@ const config: ExpoConfig = {
   icon: "./assets/speakup-logo.png",
   assetBundlePatterns: ["**/*"],
   plugins: [
+    [
+      "expo-camera",
+      {
+        cameraPermission: "Allow SpeakUp to use your camera for in-app speaking videos.",
+        microphonePermission: "Allow SpeakUp to use your microphone while recording speaking videos.",
+        recordAudioAndroid: true,
+      },
+    ],
     "expo-audio",
     "expo-video",
     [

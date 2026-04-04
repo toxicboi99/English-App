@@ -2,12 +2,14 @@ import { apiError, apiSuccess, handleApiError } from "@/lib/api";
 import { getRoomsData } from "@/lib/data";
 import { requireMobileSessionUser } from "@/lib/mobile-auth";
 import { prisma } from "@/lib/prisma";
+import { cleanupExpiredRooms } from "@/lib/rooms";
 import { safeSlug } from "@/lib/utils";
 import { roomSchema } from "@/lib/validators";
 
 export async function GET(request: Request) {
   try {
     const user = await requireMobileSessionUser(request);
+    await cleanupExpiredRooms();
     const rooms = await getRoomsData(user.id);
     return apiSuccess({ rooms });
   } catch (error) {
@@ -18,6 +20,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const user = await requireMobileSessionUser(request);
+    await cleanupExpiredRooms();
     const body = roomSchema.parse(await request.json());
 
     if (body.action === "create") {

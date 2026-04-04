@@ -1,5 +1,5 @@
 import { RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync, useAudioRecorder, useAudioRecorderState } from "expo-audio";
-import { startTransition, useEffect, useMemo, useState } from "react";
+import { startTransition, useEffect, useMemo, useRef, useState } from "react";
 import {
   Pressable,
   RefreshControl,
@@ -45,6 +45,8 @@ const levelOptions = [
   { label: "Fluent", value: "FLUENT" },
 ];
 
+const liveTranscriptChunkMs = 4000;
+
 function formatRecordingDuration(durationMillis: number) {
   const totalSeconds = Math.max(0, Math.round(durationMillis / 1000));
   const minutes = Math.floor(totalSeconds / 60);
@@ -53,18 +55,45 @@ function formatRecordingDuration(durationMillis: number) {
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
+function inferAudioUploadMeta(uri: string) {
+  const lowerUri = uri.toLowerCase();
+
+  if (lowerUri.endsWith(".webm")) {
+    return { mimeType: "audio/webm", extension: "webm" };
+  }
+
+  if (lowerUri.endsWith(".3gp")) {
+    return { mimeType: "audio/3gpp", extension: "3gp" };
+  }
+
+  if (lowerUri.endsWith(".caf")) {
+    return { mimeType: "audio/x-caf", extension: "caf" };
+  }
+
+  return { mimeType: "audio/mp4", extension: "m4a" };
+}
+
 export function PracticeSpeakingScreen({ token }: PracticeSpeakingScreenProps) {
   const { data, error, loading, refreshing, reload } = useRemoteResource(
     () => api.studio(token),
     [token],
   );
-  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY, (nextStatus) => {
+    if (nextStatus.hasError && nextStatus.error) {
+      setStatus(nextStatus.error);
+    }
+  });
   const recorderState = useAudioRecorderState(recorder, 250);
+  const chunkTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const liveListeningRef = useRef(false);
+  const chunkBusyRef = useRef(false);
+  const spokenTextRef = useRef("");
   const [learningLevel, setLearningLevel] = useState<LearningLevel>("BEGINNER");
   const [selectedPromptId, setSelectedPromptId] = useState<string | null>(null);
   const [targetText, setTargetText] = useState("");
   const [spokenText, setSpokenText] = useState("");
   const [status, setStatus] = useState<string | null>(null);
+  const [isListeningLive, setIsListeningLive] = useState(false);
   const [isScoring, setIsScoring] = useState(false);
   const [isImproving, setIsImproving] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -98,6 +127,27 @@ export function PracticeSpeakingScreen({ token }: PracticeSpeakingScreenProps) {
     setTargetText(fallbackPrompt.script);
   }, [filteredPrompts, selectedPromptId]);
 
+  useEffect(() => {
+    spokenTextRef.current = spokenText;
+  }, [spokenText]);
+
+  useEffect(() => {
+    return () => {
+      liveListeningRef.current = false;
+
+      if (chunkTimerRef.current) {
+        clearTimeout(chunkTimerRef.current);
+      }
+
+      void setAudioModeAsync({
+        allowsRecording: false,
+        interruptionMode: "duckOthers",
+        playsInSilentMode: true,
+        shouldPlayInBackground: false,
+      }).catch(() => null);
+    };
+  }, []);
+
   function applyPrompt(prompt: RecordingPrompt) {
     setSelectedPromptId(prompt.id);
     startTransition(() => {
@@ -106,22 +156,91 @@ export function PracticeSpeakingScreen({ token }: PracticeSpeakingScreenProps) {
     });
   }
 
+  function clearChunkTimer() {
+    if (chunkTimerRef.current) {
+      clearTimeout(chunkTimerRef.current);
+      chunkTimerRef.current = null;
+    }
+  }
+
+  async function disableRecordingAudioMode() {
+    await setAudioModeAsync({
+      allowsRecording: false,
+      interruptionMode: "duckOthers",
+      playsInSilentMode: true,
+      shouldPlayInBackground: false,
+    }).catch(() => null);
+  }
+
+  async function scoreTranscript(transcript: string, mode: "live" | "manual" = "manual") {
+    if (targetText.trim().length < 2 || transcript.trim().length < 1) {
+      return;
+    }
+
+    setIsScoring(true);
+    setStatus(
+      mode === "live"
+        ? "Transcript updated. Refreshing your score..."
+        : "Transcript ready. Generating your score...",
+    );
+
+    try {
+      const result = await api.speakingFeedback(token, targetText.trim(), transcript.trim());
+      setFeedback(result);
+      setStatus(
+        liveListeningRef.current
+          ? "Listening live... transcript and score are updating."
+          : "Transcript and score are ready.",
+      );
+    } catch (scoreError) {
+      setStatus(
+        scoreError instanceof Error
+          ? scoreError.message
+          : "Unable to generate speaking feedback.",
+      );
+    } finally {
+      setIsScoring(false);
+    }
+  }
+
   async function transcribeRecording(recordingUri: string) {
     setIsTranscribing(true);
-    setStatus("Transcribing your voice...");
+    setStatus(
+      liveListeningRef.current
+        ? "Transcribing the latest live chunk..."
+        : "Transcribing your voice...",
+    );
 
+    const fileMeta = inferAudioUploadMeta(recordingUri);
     const formData = new FormData();
     formData.append("language", "en");
     formData.append("file", {
       uri: recordingUri,
-      name: `speakup-${Date.now()}.m4a`,
-      type: "audio/m4a",
+      name: `speakup-${Date.now()}.${fileMeta.extension}`,
+      type: fileMeta.mimeType,
     } as never);
 
     try {
       const result = await api.transcribeSpeech(token, formData);
-      setSpokenText(result.transcript);
-      setStatus("Transcript ready. Generate a score to compare it with the prompt.");
+      const incomingTranscript = result.transcript.trim();
+
+      if (!incomingTranscript) {
+        return;
+      }
+
+      const nextTranscript = [spokenTextRef.current, incomingTranscript]
+        .filter(Boolean)
+        .join(" ")
+        .replace(/\s+/g, " ")
+        .trim();
+
+      if (!nextTranscript || nextTranscript === spokenTextRef.current) {
+        return;
+      }
+
+      spokenTextRef.current = nextTranscript;
+      setSpokenText(nextTranscript);
+      await scoreTranscript(nextTranscript, liveListeningRef.current ? "live" : "manual");
     } catch (transcribeError) {
       setStatus(
         transcribeError instanceof Error
@@ -130,18 +249,105 @@ export function PracticeSpeakingScreen({ token }: PracticeSpeakingScreenProps) {
       );
     } finally {
       setIsTranscribing(false);
-      await setAudioModeAsync({
-        allowsRecording: false,
-        interruptionMode: "duckOthers",
-        playsInSilentMode: true,
-        shouldPlayInBackground: false,
-      }).catch(() => null);
+    }
+  }
+
+  async function getRecordingUri() {
+    let recordingUri = recorder.uri ?? recorder.getStatus().url ?? recorderState.url;
+
+    if (!recordingUri) {
+      for (let attempt = 0; attempt < 10; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        recordingUri = recorder.uri ?? recorder.getStatus().url ?? recorderState.url;
+
+        if (recordingUri) {
+          break;
+        }
+      }
+    }
+
+    return recordingUri;
+  }
+
+  async function startNextLiveChunk() {
+    if (!liveListeningRef.current) {
+      return;
+    }
+
+    try {
+      await recorder.prepareToRecordAsync();
+      recorder.record();
+      clearChunkTimer();
+      chunkTimerRef.current = setTimeout(() => {
+        void finishLiveChunk(true);
+      }, liveTranscriptChunkMs);
+      setStatus("Listening live... transcript will keep filling while you speak.");
+    } catch (recordingError) {
+      liveListeningRef.current = false;
+      setIsListeningLive(false);
+      await disableRecordingAudioMode();
+      setStatus(
+        recordingError instanceof Error
+          ? recordingError.message
+          : "Unable to continue live microphone recording.",
+      );
+    }
+  }
+
+  async function finishLiveChunk(continueListening: boolean) {
+    if (chunkBusyRef.current) {
+      return;
+    }
+
+    chunkBusyRef.current = true;
+    clearChunkTimer();
+
+    try {
+      const recorderStatus = recorder.getStatus();
+      const isRecordingNow = recorderState.isRecording || recorderStatus.isRecording;
+
+      if (isRecordingNow) {
+        await recorder.stop();
+        const recordingUri = await getRecordingUri();
+
+        if (!recordingUri) {
+          setStatus("Recording finished, but no audio file was saved. Please try again.");
+        } else {
+          await transcribeRecording(recordingUri);
+        }
+      }
+    } catch (stopError) {
+      setStatus(
+        stopError instanceof Error
+          ? stopError.message
+          : "Unable to finish the current live chunk.",
+      );
+    } finally {
+      chunkBusyRef.current = false;
+
+      if (continueListening && liveListeningRef.current) {
+        await startNextLiveChunk();
+      } else {
+        liveListeningRef.current = false;
+        setIsListeningLive(false);
+        await disableRecordingAudioMode();
+        setStatus(
+          spokenTextRef.current.trim()
+            ? "Listening stopped. Transcript and score are ready."
+            : "Listening stopped.",
+        );
+      }
     }
   }
 
   async function startListening() {
+    liveListeningRef.current = false;
+    setIsListeningLive(false);
+    clearChunkTimer();
     setFeedback(null);
     setImprovedText(null);
+    spokenTextRef.current = "";
+    setSpokenText("");
 
     const permission = await requestRecordingPermissionsAsync();
 
@@ -157,9 +363,9 @@ export function PracticeSpeakingScreen({ token }: PracticeSpeakingScreenProps) {
         playsInSilentMode: true,
         shouldPlayInBackground: false,
       });
-      await recorder.prepareToRecordAsync();
-      recorder.record();
-      setStatus("Listening... speak the sentence out loud.");
+      liveListeningRef.current = true;
+      setIsListeningLive(true);
+      await startNextLiveChunk();
     } catch (recordingError) {
       setStatus(
         recordingError instanceof Error
@@ -170,28 +376,20 @@ export function PracticeSpeakingScreen({ token }: PracticeSpeakingScreenProps) {
   }
 
   async function stopListening() {
-    if (!recorderState.isRecording) {
+    if (!isListeningLive && !recorderState.isRecording && !chunkBusyRef.current) {
       return;
     }
 
-    try {
-      await recorder.stop();
-      const recordingUri = recorder.uri ?? recorder.getStatus().url;
+    liveListeningRef.current = false;
+    setIsListeningLive(false);
+    clearChunkTimer();
 
-      if (!recordingUri) {
-        setStatus("Recording finished, but no audio file was saved. Please try again.");
-        return;
-      }
-
-      setStatus("Listening stopped. Preparing your transcript...");
-      await transcribeRecording(recordingUri);
-    } catch (stopError) {
-      setStatus(
-        stopError instanceof Error
-          ? stopError.message
-          : "Unable to finish the recording.",
-      );
+    if (chunkBusyRef.current) {
+      setStatus("Finishing the current live transcript chunk...");
+      return;
     }
+
+    await finishLiveChunk(false);
   }
 
   async function generateScore() {
@@ -205,22 +403,7 @@ export function PracticeSpeakingScreen({ token }: PracticeSpeakingScreenProps) {
       return;
     }
 
-    setIsScoring(true);
-    setStatus("Scoring your response...");
-
-    try {
-      const result = await api.speakingFeedback(token, targetText.trim(), spokenText.trim());
-      setFeedback(result);
-      setStatus("Feedback ready.");
-    } catch (scoreError) {
-      setStatus(
-        scoreError instanceof Error
-          ? scoreError.message
-          : "Unable to generate speaking feedback.",
-      );
-    } finally {
-      setIsScoring(false);
-    }
+    await scoreTranscript(spokenText.trim());
   }
 
   async function improveSentence() {
@@ -258,9 +441,9 @@ export function PracticeSpeakingScreen({ token }: PracticeSpeakingScreenProps) {
       showsVerticalScrollIndicator={false}
     >
       <HeroCard
-        description="Use the same speaking prompts as the web app, record your voice from the phone, transcribe it, and compare it against the target sentence."
+        description="Use the same speaking prompts as the web app, let SpeakUp fill the transcript while you talk, and keep the score updating against the target sentence."
         kicker="Speaking Practice"
-        title="Train your speaking with real voice capture."
+        title="Train your speaking with live voice capture."
       />
 
       {status ? <StatusNotice message={status} tone="info" /> : null}
@@ -329,15 +512,19 @@ export function PracticeSpeakingScreen({ token }: PracticeSpeakingScreenProps) {
 
           <Card style={{ gap: 14 }}>
             <SectionTitle
-              subtitle="Record your voice first, then edit the transcript only if needed."
+              subtitle="Speak naturally and let the transcript plus score update in live chunks while you practice."
               title="Voice capture"
             />
             <View style={styles.recordingSummary}>
               <Tag
                 label={
-                  recorderState.isRecording ? "Listening live" : "Microphone idle"
+                  isListeningLive || recorderState.isRecording
+                    ? "Listening live"
+                    : "Microphone idle"
                 }
-                tone={recorderState.isRecording ? "success" : "soft"}
+                tone={
+                  isListeningLive || recorderState.isRecording ? "success" : "soft"
+                }
               />
               <Tag label={`Duration ${formatRecordingDuration(recorderState.durationMillis)}`} />
               {selectedPrompt ? (
@@ -353,13 +540,13 @@ export function PracticeSpeakingScreen({ token }: PracticeSpeakingScreenProps) {
             />
             <View style={styles.actionRow}>
               <AppButton
-                disabled={recorderState.isRecording || isTranscribing}
+                disabled={isListeningLive || recorderState.isRecording || isTranscribing}
                 label="Start listening"
                 onPress={() => void startListening()}
                 style={styles.flexButton}
               />
               <AppButton
-                disabled={!recorderState.isRecording}
+                disabled={!isListeningLive && !recorderState.isRecording && !isTranscribing}
                 label="Stop"
                 onPress={() => void stopListening()}
                 style={styles.flexButton}
@@ -367,8 +554,8 @@ export function PracticeSpeakingScreen({ token }: PracticeSpeakingScreenProps) {
               />
             </View>
             <Text style={styles.helperText}>
-              Speak clearly into your phone. Once you stop recording, SpeakUp will transcribe
-              your voice and place it into the transcript box below.
+              Speak clearly into your phone. SpeakUp records in short live chunks so the
+              transcript and score keep filling while you are still talking.
             </Text>
           </Card>
 
@@ -381,7 +568,7 @@ export function PracticeSpeakingScreen({ token }: PracticeSpeakingScreenProps) {
               label="Transcript"
               multiline
               onChangeText={setSpokenText}
-              placeholder="Your spoken transcript will appear here after recording."
+              placeholder="Your spoken transcript will keep appearing here while you speak."
               value={spokenText}
             />
             <View style={styles.actionRow}>

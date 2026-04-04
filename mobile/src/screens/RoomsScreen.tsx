@@ -1,12 +1,12 @@
 import { useState } from "react";
 import {
-  Linking,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
+import { WebView } from "react-native-webview";
 
 import { api } from "../api";
 import {
@@ -48,7 +48,7 @@ const providerLabels: Record<Room["provider"], string> = {
   WEBRTC: "Browser local preview",
 };
 
-export function RoomsScreen({ token }: RoomsScreenProps) {
+export function RoomsScreen({ token, user }: RoomsScreenProps) {
   const { data, error, loading, refreshing, reload } = useRemoteResource(
     () => api.rooms(token),
     [token],
@@ -60,6 +60,12 @@ export function RoomsScreen({ token }: RoomsScreenProps) {
   const [provider, setProvider] = useState<"LIVEKIT" | "WEBRTC">("LIVEKIT");
   const [maxParticipants, setMaxParticipants] = useState("4");
   const [isCreating, setIsCreating] = useState(false);
+  const [activeRoom, setActiveRoom] = useState<Room | null>(null);
+  const [stageVersion, setStageVersion] = useState(0);
+
+  const visibleActiveRoom =
+    activeRoom &&
+    (data?.rooms.find((room) => room.id === activeRoom.id) ?? activeRoom);
 
   async function createRoom() {
     if (!name.trim()) {
@@ -71,22 +77,29 @@ export function RoomsScreen({ token }: RoomsScreenProps) {
     setStatus(null);
 
     try {
-      await api.roomAction(token, {
+      const response = await api.roomAction(token, {
         action: "create",
         name: name.trim(),
         topic: topic.trim() || undefined,
         maxParticipants: Number(maxParticipants),
         provider,
       });
-      setStatus(
-        provider === "LIVEKIT"
-          ? "Room created. Join it from the list below and open the live stage."
-          : "Preview room created. Join it from the list below and open the stage.",
-      );
+
       setName("");
       setTopic("");
       setProvider("LIVEKIT");
       setMaxParticipants("4");
+
+      if (response.room) {
+        setActiveRoom(response.room);
+        setStageVersion((current) => current + 1);
+      }
+
+      setStatus(
+        provider === "LIVEKIT"
+          ? "Room created. Opening the live mobile stage."
+          : "Preview room created. Opening the mobile room stage.",
+      );
       await reload();
     } catch (createError) {
       setStatus(
@@ -97,51 +110,155 @@ export function RoomsScreen({ token }: RoomsScreenProps) {
     }
   }
 
-  async function roomAction(
-    action: "join" | "leave",
-    roomId: string,
-    busyKey: string,
-  ) {
-    setBusyId(busyKey);
+  async function enterRoom(room: Room) {
+    setBusyId(`enter-${room.id}`);
     setStatus(null);
 
     try {
-      await api.roomAction(token, { action, roomId });
-      setStatus(
-        action === "join"
-          ? "Room membership updated. You can open the stage now."
-          : "You have left the room.",
-      );
+      if (!room.joinedByMe) {
+        await api.roomAction(token, { action: "join", roomId: room.id });
+      }
+
+      setActiveRoom(room);
+      setStageVersion((current) => current + 1);
+      setStatus("Opening the live mobile room stage.");
       await reload();
     } catch (actionError) {
       setStatus(
-        actionError instanceof Error ? actionError.message : "Unable to update room.",
+        actionError instanceof Error
+          ? actionError.message
+          : "Unable to open this room.",
       );
     } finally {
       setBusyId(null);
     }
   }
 
-  async function openRoomStage(room: Room) {
-    setBusyId(`open-${room.id}`);
-    setStatus("Opening the room stage in your browser...");
+  async function leaveRoom(roomId: string, closeStage = false) {
+    setBusyId(`leave-${roomId}`);
+    setStatus(null);
 
     try {
-      await Linking.openURL(api.roomLaunchUrl(room.slug));
+      await api.roomAction(token, { action: "leave", roomId });
+      if (closeStage || activeRoom?.id === roomId) {
+        setActiveRoom(null);
+      }
+      setStatus("You have left the room.");
+      await reload();
+    } catch (actionError) {
       setStatus(
-        room.provider === "LIVEKIT"
-          ? "The LiveKit room stage is opening in your browser."
-          : "The browser-preview room stage is opening in your browser.",
-      );
-    } catch (openError) {
-      setStatus(
-        openError instanceof Error
-          ? openError.message
-          : "Unable to open the room stage.",
+        actionError instanceof Error ? actionError.message : "Unable to leave room.",
       );
     } finally {
       setBusyId(null);
     }
+  }
+
+  function handleStageMessage(rawEvent: { nativeEvent: { data: string } }) {
+    try {
+      const payload = JSON.parse(rawEvent.nativeEvent.data) as {
+        type?: string;
+        message?: string;
+      };
+
+      if (payload.type === "status" && payload.message) {
+        setStatus(payload.message);
+        return;
+      }
+
+      if (payload.type === "room-error") {
+        setStatus(
+          "The mobile call stage could not start. Check camera permissions and your LiveKit deployment settings.",
+        );
+        return;
+      }
+
+      if (payload.type === "room-disconnected") {
+        setStatus("The live room disconnected. Refresh the stage or join again.");
+      }
+    } catch {
+      setStatus("The room stage sent an unreadable update.");
+    }
+  }
+
+  if (visibleActiveRoom) {
+    return (
+      <View style={styles.stageScreen}>
+        {status ? <StatusNotice message={status} tone="info" /> : null}
+        {error ? <StatusNotice message={error} tone="danger" /> : null}
+
+        <Card style={styles.stageCard}>
+          <SectionTitle
+            subtitle="Camera and microphone stay inside the mobile app screen while this room is open."
+            title="Live room stage"
+          />
+          <View style={styles.stageBadges}>
+            <Tag label={providerLabels[visibleActiveRoom.provider]} />
+            <Tag
+              label={`${visibleActiveRoom.participants.length}/${visibleActiveRoom.maxParticipants} joined`}
+              tone="soft"
+            />
+            <Tag label={`Host ${visibleActiveRoom.host.name}`} tone="soft" />
+          </View>
+          <Text style={styles.stageRoomName}>{visibleActiveRoom.name}</Text>
+          <Text style={styles.stageRoomTopic}>
+            {visibleActiveRoom.topic ||
+              `${user.name}, this room is ready for live English practice.`}
+          </Text>
+          <View style={styles.stageActionRow}>
+            <AppButton
+              label="Exit live view"
+              onPress={() => setActiveRoom(null)}
+              style={styles.stageActionButton}
+              variant="ghost"
+            />
+            <AppButton
+              label="Refresh stage"
+              onPress={() => setStageVersion((current) => current + 1)}
+              style={styles.stageActionButton}
+              variant="ghost"
+            />
+            <AppButton
+              label="Leave room"
+              loading={busyId === `leave-${visibleActiveRoom.id}`}
+              onPress={() => void leaveRoom(visibleActiveRoom.id, true)}
+              style={styles.stageActionButton}
+            />
+          </View>
+        </Card>
+
+        <View style={styles.stageFrame}>
+          <WebView
+            allowsInlineMediaPlayback
+            domStorageEnabled
+            javaScriptEnabled
+            key={`${visibleActiveRoom.id}-${stageVersion}`}
+            mediaPlaybackRequiresUserAction={false}
+            mixedContentMode="always"
+            onError={(event) => {
+              setStatus(
+                event.nativeEvent.description ||
+                  "Unable to load the mobile room stage.",
+              );
+            }}
+            onHttpError={(event) => {
+              setStatus(
+                `The mobile room stage failed to load (${event.nativeEvent.statusCode}).`,
+              );
+            }}
+            onMessage={handleStageMessage}
+            originWhitelist={["*"]}
+            source={{
+              headers: {
+                Authorization: `Bearer ${token}`,
+              },
+              uri: api.roomStageUrl(visibleActiveRoom.id),
+            }}
+            style={styles.stageWebview}
+          />
+        </View>
+      </View>
+    );
   }
 
   return (
@@ -153,19 +270,19 @@ export function RoomsScreen({ token }: RoomsScreenProps) {
       showsVerticalScrollIndicator={false}
     >
       <HeroCard
-        description="Create, join, and launch the same debate rooms used by the web app. Mobile now handles the real room workflow instead of only editing records."
+        description="Create rooms, join them, and open the live video call stage inside the mobile app instead of leaving for a separate browser screen."
         kicker="Debate Rooms"
         title="Keep your speaking rooms fully in sync."
       />
 
       <Card>
         <SectionTitle
-          subtitle="Use LiveKit for real shared rooms. Use WebRTC when you only need a lighter browser-local practice stage."
+          subtitle="LiveKit gives you the real shared call stage. WebRTC keeps a lighter local preview mode when you do not need production multi-user media."
           title="Provider guide"
         />
         <Text style={styles.noteText}>
-          After you join a room from mobile, tap Open stage to continue into the actual
-          room experience in your phone browser.
+          Rooms older than 24 hours are cleaned up automatically, so the mobile list stays
+          focused on current practice sessions.
         </Text>
       </Card>
 
@@ -175,7 +292,7 @@ export function RoomsScreen({ token }: RoomsScreenProps) {
 
       <Card style={{ gap: 14 }}>
         <SectionTitle
-          subtitle="Create a room with the same backend data model the web app uses."
+          subtitle="Create a room with the same backend data model the web app uses, then open it directly in the mobile call stage."
           title="Create a room"
         />
         <TextField
@@ -217,7 +334,7 @@ export function RoomsScreen({ token }: RoomsScreenProps) {
       {data ? (
         <Card>
           <SectionTitle
-            subtitle="Real room records from the database with stage launch support."
+            subtitle="Real room records from the database, ready to open inside the mobile call screen."
             title="Available rooms"
           />
           {data.rooms.length ? (
@@ -265,24 +382,16 @@ export function RoomsScreen({ token }: RoomsScreenProps) {
 
                   <View style={styles.roomActions}>
                     <AppButton
-                      label={room.joinedByMe ? "Refresh join" : "Join room"}
-                      loading={busyId === `join-${room.id}`}
-                      onPress={() => void roomAction("join", room.id, `join-${room.id}`)}
+                      label={room.joinedByMe ? "Enter live room" : "Join and enter"}
+                      loading={busyId === `enter-${room.id}`}
+                      onPress={() => void enterRoom(room)}
                       style={styles.flexButton}
-                    />
-                    <AppButton
-                      disabled={!room.joinedByMe}
-                      label="Open stage"
-                      loading={busyId === `open-${room.id}`}
-                      onPress={() => void openRoomStage(room)}
-                      style={styles.flexButton}
-                      variant="soft"
                     />
                     {room.joinedByMe ? (
                       <AppButton
                         label="Leave"
                         loading={busyId === `leave-${room.id}`}
-                        onPress={() => void roomAction("leave", room.id, `leave-${room.id}`)}
+                        onPress={() => void leaveRoom(room.id)}
                         style={styles.flexButton}
                         variant="ghost"
                       />
@@ -390,5 +499,51 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 21,
     marginTop: 8,
+  },
+  stageActionButton: {
+    flexGrow: 1,
+    minWidth: 120,
+  },
+  stageActionRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  stageBadges: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  stageCard: {
+    gap: 14,
+  },
+  stageFrame: {
+    backgroundColor: "#081221",
+    borderColor: palette.line,
+    borderRadius: 28,
+    borderWidth: 1,
+    flex: 1,
+    overflow: "hidden",
+  },
+  stageRoomName: {
+    color: palette.ink,
+    fontFamily: fonts.display,
+    fontSize: 24,
+    fontWeight: "700",
+  },
+  stageRoomTopic: {
+    color: palette.inkSoft,
+    fontFamily: fonts.body,
+    fontSize: 14,
+    lineHeight: 22,
+  },
+  stageScreen: {
+    flex: 1,
+    gap: 12,
+    paddingBottom: 12,
+  },
+  stageWebview: {
+    backgroundColor: "#081221",
+    flex: 1,
   },
 });
